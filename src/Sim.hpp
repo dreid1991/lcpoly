@@ -1,8 +1,8 @@
 #include "Disk.hpp"
 #include "Box.hpp"
 #include "mersenne.h"
+#include "defs.h"
 
-using namespace LAMMPS_NS;
 class Sim {
 	public:
         Box box;
@@ -17,9 +17,9 @@ class Sim {
         void initialize_system();
         void allocate_memory();
         void generate_chains();
-        void calc_random_vector(vector &b);
-        void calc_random_normal_vector(vector &b, vector a);
-        void calc_cross_vector(vector &c, vector a, vector b);
+        void calc_random_vector(Vector3d &b);
+        void calc_random_normal_vector(Vector3d &b, Vector3d a);
+        void calc_cross_vector(Vector3d &c, Vector3d a, Vector3d b);
         double calc_GB_total();
         void update_disk_energies();
         double calc_disk_energy(int);
@@ -34,12 +34,12 @@ class Sim {
         double calc_bond(Disk d1, Disk d2);
         double calc_wlc(Disk d1, Disk d2);
         bool withinExclude(int,int);
-        double calc_dist(vector r1, vector r2);
-        void nearest_image_dist(vector &r, vector r1, vector r2);
-        void PBC_shift(vector &r_shift, vector r);
+        double calc_dist(Vector3d r1, Vector3d r2);
+        void nearest_image_dist(Vector3d &r, Vector3d r1, Vector3d r2);
+        void PBC_shift(Vector3d &r_shift, Vector3d r);
         void adjust_single_u_vector(int);
         void adjust_u_vectors(int);
-        void proj_vector(vector &a, vector n);
+        void proj_vector(Vector3d &a, Vector3d n);
 
         void MCMoveContin();
 

@@ -13,7 +13,7 @@
 20.0	Box length in y direction
 20.0	Box length in z direction
 10	Number of disks on a chain
-60	Number of chains in the simulation
+1	Number of chains in the simulation
 1.88	Reduced temperature
 1.0	Epsilon for potential
 1.0	Sigma for potential

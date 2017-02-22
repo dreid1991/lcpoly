@@ -1,14 +1,13 @@
 #include "defs.h"
 
-using namespace LAMMPS_NS;
 
 class Disk {
 	public:
-        Vector r; //Contains x,y,z coordinates
-        Vector rn; //Contains x,y,z coordinates without periodic boundary conditions for bond calculation purposes
-        Vector u; //Vector tangent to the polymer 
-        Vector f; //Vector normal to the disk (used for Gay-Berne calculations)
-        Vector v; //Vector normal to u and f
+        Vector3d r; //Contains x,y,z coordinates
+        Vector3d rn; //Contains x,y,z coordinates without periodic boundary conditions for bond calculation purposes
+        Vector3d u; //Vector tangent to the polymer 
+        Vector3d f; //Vector normal to the disk (used for Gay-Berne calculations)
+        Vector3d v; //Vector normal to u and f
 
         /* Using this to store energy just makes stuff too complicated
         double GB_energy; //Gay-Berne potential energy of the system that would be lost if this particle disappeared

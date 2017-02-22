@@ -9,7 +9,7 @@ int main() {
 	Sim *mySim = new Sim();
 	mySim->MCSim();
 	
-	delete [] mySim;
+    free(mySim);
 	puts("SIMULATION COMPLETE");
 	
 	

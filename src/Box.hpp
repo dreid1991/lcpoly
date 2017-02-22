@@ -41,7 +41,7 @@ class Box {
        
        //continuum stuff
        Grid<double> densities[2];
-       Grid<Tensor> directorOrdering;
+       Grid<Matrix3d> directorOrdering;
 
 
 };

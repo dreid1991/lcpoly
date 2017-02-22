@@ -1,21 +1,21 @@
 #include <vector>
 #include <Eigen/Dense>
 template <class T>
-class MyGrid {
+class Grid {
 public:
         std::vector<T> vals;
         int ns[3];
         double os[3];
-        doub
-        MyGrid(){}
-        MyGrid(int nx, int ny, int nz) {
+        //doub
+        Grid(){}
+        Grid(int nx, int ny, int nz) {
                 vals = std::vector<T>(nx*ny*nz, 0);
                 ns[0] = nx;
                 ns[1] = ny;
                 ns[2] = nz;
         }
 
-        MyGrid(int nx, int ny, int nz, int vlen) {
+        Grid(int nx, int ny, int nz, int vlen) {
           vals = std::vector<T>(nx*ny*nz, std::vector<int>(vlen));
         }
         void reset_grid(){

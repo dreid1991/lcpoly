@@ -1,4 +1,3 @@
 #include <Eigen/Dense>
+#include <Eigen/Geometry>//quaternion
 using namespace Eigen;
-typedef Matrix<double, 3, 3> Tensor;
-enum MODE {PARTICLE, CONTINUUM};

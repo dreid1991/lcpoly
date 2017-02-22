@@ -8,6 +8,8 @@
 #define PI 3.14159265358979323846
 
 
+enum MODE {PARTICLE, CONTINUUM};
+
 using namespace LAMMPS_NS;
 //using namespace std;
 
@@ -22,6 +24,8 @@ Sim::Sim() {
 void Sim::MCSim() {
     box.numAccepts = 0;
     box.numRejects = 0;
+    printXYZ();
+    return;
     for (box.cycle=0;box.cycle<box.numCycles;box.cycle++) {
         if (box.cycle%box.vizInterval == 0) {
             shiftCOM();
@@ -150,6 +154,7 @@ void Sim::generate_chains() {
     int i,j,k,m,m0;
     double x,y,z,R1,R2,R3;
 
+    printf("NUM %d\n", box.numChains);
     for (i=0;i<box.numChains;i++) {
         for (j=0;j<box.numDisks;j++) {
             m = i*box.numDisks+j;
@@ -370,16 +375,16 @@ double Sim::calc_GB(Disk d1, Disk d2) { //Gay-Berne energy is calculated between
     double f0,f1,f2,ener,r_dist;
     double sig,eps,a,a3,a6;
     nearest_image_dist(r, d1.r,d2.r);
-    r_dist = sqrt(vec_dot(r,r));
+    r_dist = sqrt(r.dot(r));
 
     if (r_dist > box.r_cut) {
         //printf("%f\n",ener);
         return 0.0;
     }
 
-    f0 = vec_dot(d1.f,d2.f);
-    f1 = vec_dot(r,d1.f);
-    f2 = vec_dot(r,d2.f);
+    f0 = d1.f.dot(d2.f);
+    f1 = r.dot(d1.f);
+    f2 = r.dot(d2.f);
     eps = eps_func(f0,f1,f2);
     sig = sig_func(f0,f1,f2);
     a = box.sig0 / (r_dist - sig + box.sig0);
@@ -446,10 +451,10 @@ double Sim::calc_wlc(Disk d1, Disk d2) { //Twisting and bending energy is calcul
         v1[j] = d1.f[j];
         v2[j] = d2.f[j];
     }
-    vec_norm(n);
+    n.normalize();
     proj_vector(v1,n);
     proj_vector(v2,n);
-    value = vec_dot(v1,v2);
+    value = v1.dot(v2);
     if (value > 1.0) {
         value = 1.0;
     }
@@ -524,25 +529,25 @@ void Sim::adjust_single_u_vector(int i) {
             disk[i].u[1] = disk[i+1].rn[1] - disk[i].rn[1];
             disk[i].u[2] = disk[i+1].rn[2] - disk[i].rn[2];
 
-            vec_norm(disk[i].u);
+            disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
+            disk[i].v = disk[i].u.cross(disk[i].f);
         } else if ((i+1)%box.numDisks==0) {
             disk[i].u[0] = disk[i].rn[0] - disk[i-1].rn[0];
             disk[i].u[1] = disk[i].rn[1] - disk[i-1].rn[1];
             disk[i].u[2] = disk[i].rn[2] - disk[i-1].rn[2];
 
-            vec_norm(disk[i].u);
+            disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
+            disk[i].v = disk[i].u.cross(disk[i].f);
 
         } else {
             disk[i].u[0] = (disk[i+1].rn[0]-disk[i-1].rn[0])/2;
             disk[i].u[1] = (disk[i+1].rn[1]-disk[i-1].rn[1])/2;
             disk[i].u[2] = (disk[i+1].rn[2]-disk[i-1].rn[2])/2;
-            vec_norm(disk[i].u);
+            disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
+            disk[i].v = disk[i].u.cross(disk[i].f);
 
         }
 
@@ -555,53 +560,53 @@ void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to 
             disk[i].u[1] = disk[i+1].rn[1] - disk[i].rn[1];
             disk[i].u[2] = disk[i+1].rn[2] - disk[i].rn[2];
 
-            vec_norm(disk[i].u);
+            disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
+            disk[i].v = disk[i].u.cross(disk[i].f);
 
             disk[i+1].u[0] = (disk[i+2].rn[0] - disk[i].rn[0])/2;
             disk[i+1].u[1] = (disk[i+2].rn[1] - disk[i].rn[1])/2;
             disk[i+1].u[2] = (disk[i+2].rn[2] - disk[i].rn[2])/2;
 
-            vec_norm(disk[i+1].u);
+            disk[i+1].u.normalize();
             proj_vector(disk[i+1].f,disk[i+1].u);
-            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
+            disk[i+1].v = disk[i+1].u.cross(disk[i+1].f);
 
         } else if ((i+1)%box.numDisks==0) {
             disk[i].u[0] = disk[i].rn[0] - disk[i-1].rn[0];
             disk[i].u[1] = disk[i].rn[1] - disk[i-1].rn[1];
             disk[i].u[2] = disk[i].rn[2] - disk[i-1].rn[2];
 
-            vec_norm(disk[i].u);
+            disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
+            disk[i].v = disk[i].u.cross(disk[i].f);
 
 
             disk[i-1].u[0] = (disk[i].rn[0] - disk[i-2].rn[0])/2;
             disk[i-1].u[1] = (disk[i].rn[1] - disk[i-2].rn[1])/2;
             disk[i-1].u[2] = (disk[i].rn[2] - disk[i-2].rn[2])/2;
 
-            vec_norm(disk[i-1].u);
+            disk[i-1].u.normalize();
             proj_vector(disk[i-1].f,disk[i-1].u);
-            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
+            disk[i-1].v = disk[i-1].u.cross(disk[i-1].f);
 
         } else {
             disk[i+1].u[0] = (disk[i+2].rn[0] - disk[i].rn[0])/2;
             disk[i+1].u[1] = (disk[i+2].rn[1] - disk[i].rn[1])/2;
             disk[i+1].u[2] = (disk[i+2].rn[2] - disk[i].rn[2])/2;
 
-            vec_norm(disk[i+1].u);
+            disk[i+1].u.normalize();
             proj_vector(disk[i+1].f,disk[i+1].u);
-            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
+            disk[i+1].v = disk[i+1].u.cross(disk[i+1].f);
 
 
             disk[i-1].u[0] = (disk[i].rn[0] - disk[i-2].rn[0])/2;
             disk[i-1].u[1] = (disk[i].rn[1] - disk[i-2].rn[1])/2;
             disk[i-1].u[2] = (disk[i].rn[2] - disk[i-2].rn[2])/2;
 
-            vec_norm(disk[i-1].u);
+            disk[i-1].u.normalize();
             proj_vector(disk[i-1].f,disk[i-1].u);
-            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
+            disk[i-1].v = disk[i-1].u.cross(disk[i-1].f);
 
 
         }
@@ -615,11 +620,11 @@ void Sim::proj_vector(Vector3d &a, Vector3d n) {//Project vector a onto the plan
     for (i=0;i<3;i++) {
         n2[i] = n[i];
     }
-    dot = vec_dot(a,n2);
+    dot = a.dot(n2);
     for (i=0;i<3;i++) {
         a[i] = a[i] - dot*n2[i];
     }
-    vec_norm(a);
+    a.normalize();
 }
 
 
@@ -640,18 +645,19 @@ void Sim::MCMove() {
     double translate = box.fracDisplace+box.fracRotate+box.fracBend+box.fracTwist+box.fracCurl+box.fracTranslate;
     double rand = RanGen->Random();
     
-    if (rand < displace) 
-        MC_displace();
-    else if (rand < rotate) 
-        MC_rotate();
-    else if (rand < bend) 
-        MC_bend();
-    else if (rand < twist) 
-        MC_twist();
-    else if (rand < curl) 
-        MC_curl();
-    else if (rand < translate)
-        MC_translate();
+    if (rand < displace) {
+        //MC_displace();
+    } else if (rand < rotate) {
+     //   MC_rotate();
+    } else if (rand < bend) {
+        //MC_bend();
+    } else if (rand < twist) {
+        //MC_twist();
+    } else if (rand < curl) {
+        //MC_curl();
+    } else if (rand < translate) {
+        //MC_translate();
+    }
 }
 
 void Sim::MC_displace() { //Displace a disk slightly without changing its orientation
@@ -721,7 +727,6 @@ void Sim::MC_rotate() { //Randomly rotate a disk about some axis without changin
     double pre_energy, post_energy, dE;
     Disk save;
     Vector3d axis;
-    Vector4d quat;
 
     for (int move=0;move<box.numTotal;move++) {
         do {
@@ -729,16 +734,16 @@ void Sim::MC_rotate() { //Randomly rotate a disk about some axis without changin
         } while(i >= box.numTotal);
         
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
-        quat[0] = cos(theta/2);
-        for (j=0;j<3;j++) {
-            quat[j+1] = disk[i].u[j]*sin(theta/2); //Rotate around u because u cannot be changed here
-        }
-    
+       
         pre_energy = calc_disk_energy(i);
         save = disk[i];
 
-        quat_vec_rot(disk[i].f,save.f,quat);
-        quat_vec_rot(disk[i].v,save.v,quat);
+        AngleAxisd aaU(theta, save.u);
+        Matrix3d rot; 
+        rot = aaU;
+        disk[i].f = rot * save.f;
+        disk[i].v = rot * save.v;
+
 
         post_energy = calc_disk_energy(i);
 
@@ -797,9 +802,9 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
         
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
         calc_random_vector(axis); //Random unit vector for rotation
-        quat[0] = cos(theta/2);
+        //quat[0] = cos(theta/2);
         for (j=0;j<3;j++) {
-            quat[j+1] = axis[j]*sin(theta/2);
+          //  quat[j+1] = axis[j]*sin(theta/2);
         }
        
         j = 0;
@@ -807,14 +812,14 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
             for (k=0;k<3;k++) {
                 dist1[k] = disk[i].rn[k] - disk[ref].rn[k];
             }
-            quat_vec_rot(dist2,dist1,quat);
+            //quat_vec_rot(dist2,dist1,quat);
             for (k=0;k<3;k++) {
                 disk[i].rn[k] = disk[ref].rn[k] + dist2[k];
             }
             PBC_shift(disk[i].r, disk[i].rn);
-            quat_vec_rot(disk[i].u,chain[j].u,quat);
-            quat_vec_rot(disk[i].f,chain[j].f,quat);
-            quat_vec_rot(disk[i].v,chain[j].v,quat);
+            //quat_vec_rot(disk[i].u,chain[j].u,quat);
+            //quat_vec_rot(disk[i].f,chain[j].f,quat);
+            //quat_vec_rot(disk[i].v,chain[j].v,quat);
             j++;
 
         }
@@ -886,12 +891,12 @@ void Sim::MC_twist() { //Beginning at some point along the backbone, uniformly t
         for (i=first;i<=last;i++) {
             
             theta = (increment)*dtheta;
-            quat[0] = cos(theta/2);
+            //quat[0] = cos(theta/2);
             for (k=0;k<3;k++) {
-                quat[k+1] = disk[i].u[k]*sin(theta/2);
+              //  quat[k+1] = disk[i].u[k]*sin(theta/2);
             }
-            quat_vec_rot(disk[i].f,chain[j].f,quat);
-            quat_vec_rot(disk[i].v,chain[j].v,quat);
+            //quat_vec_rot(disk[i].f,chain[j].f,quat);
+            //quat_vec_rot(disk[i].v,chain[j].v,quat);
             j++;
             increment += dir;
 
@@ -926,7 +931,7 @@ void Sim::MC_curl() { //Imparts curvature to the chain by "curling" it in a rand
     Vector3d axis; // Axis of rotation
     Vector3d dist1; // Contains distance Vector3d for each disk from center of mass for rotation
     Vector3d dist2; // Contains new distance vector for each disk from center of mass for rotation
-    Vector4d quat;
+    Quaterniond quat;
     Disk *chain = new Disk[box.numDisks];
 
     for (int move=0;move<box.numChains;move++) {
@@ -966,19 +971,19 @@ void Sim::MC_curl() { //Imparts curvature to the chain by "curling" it in a rand
         for (i=1;i<tot_move;i++) {
             j=i*dir;
             tot_theta = double(i)*theta;
-            quat[0] = cos(tot_theta/2);
+            //quat[0] = cos(tot_theta/2);
             for (k=0;k<3;k++) {
-                quat[k+1] = axis[k]*sin(tot_theta/2);
+                //quat[k+1] = axis[k]*sin(tot_theta/2);
                 dist1[k] = chain[core+j].rn[k] - chain[core+j-dir].rn[k];
             }
-            quat_vec_rot(dist2,dist1,quat);
+            //quat_vec_rot(dist2,dist1,quat);
             for (k=0;k<3;k++) {
                 disk[ref+j].rn[k] = disk[ref+j-dir].rn[k] + dist2[k];
             }
             PBC_shift(disk[ref+j].r, disk[ref+j].rn);
-            quat_vec_rot(disk[ref+j].u,chain[core+j].u,quat);
-            quat_vec_rot(disk[ref+j].f,chain[core+j].f,quat);
-            quat_vec_rot(disk[ref+j].v,chain[core+j].v,quat);
+            //quat_vec_rot(disk[ref+j].u,chain[core+j].u,quat);
+            //quat_vec_rot(disk[ref+j].f,chain[core+j].f,quat);
+            //quat_vec_rot(disk[ref+j].v,chain[core+j].v,quat);
 
         }
         
@@ -1111,7 +1116,6 @@ void Sim::shiftCOM() { //Shifts the center of mass of all the nonperiodic coordi
 void Sim::printXYZ() {
     int i,j;
     FILE *dump;
-    Vector3d v,v2;
     Vector4d q;
     double dtheta = 2*PI/12;
     double theta;
@@ -1123,11 +1127,11 @@ void Sim::printXYZ() {
     for (i=0;i<box.numTotal;i++) {
        for (j=0;j<12;j++) {
             theta = dtheta*j;
-            q[0] = cos(theta/2);
-            q[1] = disk[i].f[0]*sin(theta/2);
-            q[2] = disk[i].f[1]*sin(theta/2);
-            q[3] = disk[i].f[2]*sin(theta/2);
-            quat_vec_rot(v,disk[i].u,q);
+            AngleAxisd aa(theta, disk[i].f);
+            Matrix3d rot;
+            rot = aa;
+            Vector3d v = rot * disk[i].u;
+
             fprintf(dump,"0\t%f\t%f\t%f\n",disk[i].rn[0]+v[0]*box.r0/3,disk[i].rn[1]+v[1]*box.r0/3,disk[i].rn[2]+v[2]*box.r0/3);
        }
     }
