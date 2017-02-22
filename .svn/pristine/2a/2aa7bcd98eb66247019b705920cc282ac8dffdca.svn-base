@@ -1,0 +1,24 @@
+
+
+   The process of rendering of POV-Ray scene is implemented with makefile
+
+ It is convenient, since there are several stages of rendering:
+     - convertion of quaternion
+     - defining the scene
+     - rendering itself
+
+ While working, the correction at any step can be made.
+ Therefore makefile is useful in determining what to update and what stage to skip 
+ (if changes do not affect them). 
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   src: lmp2pov.c  head.pov  RES.ini
+
+  Initial flow of steps:
+    1. compile <lmp2pov.c>
+    2. run lmp2pov (generates out.pov)
+    3. add <head.pov> with scene description
+    4. render povray using <RES.ini> 
+  clean all:
+   rm lmp2pov out.pov scene.pov scene.pov.tga scene.pov.png/jpg/...
+

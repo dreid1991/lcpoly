@@ -1,0 +1,101 @@
+\documentclass[11pt]{article}
+\include{style}
+\usepackage[margin=1.0in]{geometry}
+
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{graphicx}
+\usepackage{times}
+\usepackage[super]{natbib}
+\usepackage{wrapfig}
+
+\begin{document}
+\title{\vspace{-40pt} \large Model Description for Twistable Gay-Berne Polymer}
+\date{}
+\maketitle
+\vspace{-40pt}
+\singlespacing
+\pagenumbering{roman}
+This coarse-grained model is designed to represent a conjugated polymer with a diskotic backbone. It was designed to allow for anisotropic long-range interactions (using a modified Gay-Berne potential) to indicate the directionality of the pi bonds along the chain. It also incorporates rigidity into both the bending and twisting by using a wormlike chain model to describe the curvature and dihedral potentials to describe the twisting. Stretching is described by a harmonic potential. 
+
+\subsubsection*{Twistable Wormlike Chain (Continuous)}
+
+The continuous twistable wormlike chain model uses a set of coordinate axes to describe a "ribbon" in three-dimensional space. This ``ribbon'' can be thought of as a very thin strip where the length of the strip is much greater than the dimensions of the cross section. An orthonormal coordinate system is used to describe the placement of this strip throughout space consisting of three vectors: $\textbf{f}(s)$, $\textbf{u}(s)$, and $\textbf{v}(s)$. $s$ describes distance along the chain contour. $\textbf{u}(s)$ is defined to be the unit vector tangent to the contour in the direction of the chain. $\textbf{f}(s)$ is the unit vector normal to the strip, and can also be considered to be the normal vector for the disks used along the backbone for the Gay-Berne potential. $\textbf{v}(s)$ is defined such that $\textbf{v} = \textbf{u} \times \textbf{f}$. The change along the contour of any of these vectors is described by:
+\begin{equation*}
+\frac{d}{ds} \left[ \begin{array}{c}
+\textbf{u} \\ \textbf{f} \\ \textbf{v}  
+\end{array} \right] = \begin{bmatrix}
+0 & \omega_2 & -\omega_1 \\ -\omega_2 & 0 & \omega_3 \\ \omega_1 & -\omega_3 & 0
+\end{bmatrix} \left[ \begin{array}{c}
+\textbf{u} \\ \textbf{f} \\ \textbf{v} 
+\end{array} \right]
+\end{equation*}
+By doing some manipulation with these unit vectors, it is not difficult to show the following results:
+\begin{equation*}
+\omega_1(s)^2 = \frac{1}{2} \left( \left| \frac{d \textbf{u}}{ds}\right|^2 + \left| \frac{d \textbf{v}}{ds}\right|^2 - \left| \frac{d \textbf{f}}{ds}\right|^2 \right)
+\end{equation*}
+\begin{equation*}
+\omega_2(s)^2 = \frac{1}{2} \left( \left| \frac{d \textbf{u}}{ds}\right|^2 + \left| \frac{d \textbf{f}}{ds}\right|^2 - \left| \frac{d \textbf{v}}{ds}\right|^2 \right) 
+\end{equation*}
+\begin{equation*}
+\omega_3(s)^2 = \frac{1}{2} \left( \left| \frac{d \textbf{f}}{ds}\right|^2 + \left| \frac{d \textbf{v}}{ds}\right|^2 - \left| \frac{d \textbf{u}}{ds}\right|^2 \right)
+\end{equation*}
+The total bending and twisting energy of a continuous twistable wormlike chain is then the following functional:
+\begin{equation*}
+E_{b} = \int_0^N \left[ \kappa_{b1} \omega_1(s)^2 + \kappa_{b2} \omega_2(s)^2 + \kappa_t \omega_3(s)^2 \right] ds
+\end{equation*}
+Where $\kappa_{b1}$, $\kappa_{b2}$, and $\kappa_t$ are parameters that describe the rigidity of the polymer bending and twisting. 
+\subsubsection*{Twistable Wormlike Chain (Discrete)}
+
+For the discrete version of this model, the chain is partitioned into discrete elements, which are the disks used to calculate the Gay-Berne potential. Each disk is located at $\textbf{r}_i$ where $i = 1,2,...,N$. $\textbf{f}_i$ is simply the vector normal to the disk (used for the Gay-Berne potential), $\textbf{u}_i$ is the vector tangent to the chain, and $\textbf{v}_i$ is defined the same way as before. I take $\Delta s$ to be 1, and each derivative is computed as:
+\begin{equation*}
+\frac{d\textbf{u}_i}{ds} = \textbf{u}_{i+1} - \textbf{u}_i
+\end{equation*}
+Twisting energies are calculated from dihedral angles rather than the torsional curvature as defined by $\omega_3$. The dihedral angle $\theta_i$ is the angle between the two planes formed by $\textbf{f}_i$ and $\textbf{f}_{i+1}$ and the vector between the disks. The bonded energy overall is the following:
+\begin{equation*}
+E_b = \frac{k_{spring}}{2} \sum_{i=1}^{N-1} \left( \left| \textbf{r}_{i+1} - \textbf{r}_i \right| - r_0\right)^2 
++ \frac{\kappa_{b1}}{2} \sum_{i=1}^{N-1} \omega_{1,i}^2 
++ \frac{\kappa_{b2}}{2} \sum_{i=1}^{N-1} \omega_{2,i}^2 
++ \kappa_{t} \sum_{i=1}^{N-1} \left( 1 - \cos\left(2\theta_i\right) \right) 
+\end{equation*}
+\subsubsection*{Gay-Berne Interaction Model}
+Long range interactions are described by a modified Gay-Berne interaction to capture the anisotropy in the system. The overall interaction is of the form:
+\begin{equation*}
+E_{nb} = \sum_{i=1}^n \sum_{i < j}^n U(\textbf{f}_i,\textbf{f}_j, \left| \textbf{r}_i - \textbf{r}_j \right|)
+\end{equation*}
+\begin{equation*}
+U(\textbf{u}_1,\textbf{u}_2,r) = 4\epsilon(\textbf{u}_1,\textbf{u}_2,r) \left[ a^{12} - a^6\right]
+\end{equation*}
+\begin{equation*}
+f_0 = \textbf{u}_1 \cdot \textbf{u}_2 ; f_1 = \textbf{u}_1 \cdot \textbf{r} ; f_2 = \textbf{u}_2 \cdot \textbf{r}
+\end{equation*}
+\begin{equation*}
+a = \frac{\sigma_0}{r_{eq}-\sigma(\textbf{u}_1,\textbf{u}_2,r)+\sigma_0}
+\end{equation*}
+\begin{equation*}
+\sigma(\textbf{u}_1,\textbf{u}_2,r) = \sigma_0 \left[ 1 - \frac{\chi}{2} \left( \frac{\left( f_1+f_2\right)^2}{1+\chi f_0} + \frac{\left( f_1-f_2\right)^2}{1-\chi f_0} \right) \right]^{-1/2}
+\end{equation*}
+\begin{equation*} 
+\epsilon(\textbf{u}_1,\textbf{u}_2,r) = \epsilon_0 \epsilon^{\nu}(\textbf{u}_1,\textbf{u}_2)\epsilon'^{\mu}(\textbf{u}_1,\textbf{u}_2,r) 
+\end{equation*}
+\begin{equation*}
+\epsilon(\textbf{u}_1, \textbf{u}_2) = \frac{1}{\left( 1-\chi^2 f_0^2 \right)^{1/2}}
+\end{equation*}
+\begin{equation*}
+\epsilon(\textbf{u}_1,\textbf{u}_2,r) =  1 - \frac{\chi'}{2} \left( \frac{\left( f_1+f_2\right)^2}{1+\chi' f_0} + \frac{\left( f_1-f_2\right)^2}{1-\chi' f_0} \right) 
+\end{equation*}
+\begin{equation*}
+\chi = \frac{k^2-1}{k^2+1}; \chi' = \frac{k'^{1/\mu} - 1}{k'^{1/\mu} + 1}; k = 1/3; k' = 1/5; \nu = 1; \mu = 2 
+\end{equation*}
+\subsubsection*{Monte Carlo Moves}
+The model is implemented using the Metropolis Monte Carlo algorithm for the NVT ensemble, and makes use of four different sampling moves:
+\begin{enumerate}
+\item Single Disk Displacement: One Gay Berne ellipsoid is selected and shifted in a random direction while changing its orientation as little as possible. Any adjacent ellipsoids are also updated to account for their altered orientations. 
+\item Single Disk Rotation: One Gay Berne ellipsoid is selected and rotated by a random angle around a random axis.
+\item Chain Pivot: A single ellipsoid on a single chain is selected. A random direction is chosen and all ellipsoids in that direction are rotated about the selected ellipsoid. 
+\item Chain Twist: A single ellipsoid on a single chain is selected. A random twisting amount and a random direction are chosen, so all ellipsoids in that direction are twisted about their $\textbf{u}$ vector.
+\item Chain Reptation: I will get to this eventually. 
+\end{enumerate}
+Each Monte Carlo cycle involves performing the same move a number of times. Single disks moves are performed so that on average every disk gets moved. Chain moves are performed so that on average every chain gets moved.
+\end{document}
