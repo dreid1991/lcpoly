@@ -25,7 +25,6 @@ void Sim::MCSim() {
     box.numAccepts = 0;
     box.numRejects = 0;
     printXYZ();
-    return;
     for (box.cycle=0;box.cycle<box.numCycles;box.cycle++) {
         if (box.cycle%box.vizInterval == 0) {
             shiftCOM();
@@ -154,7 +153,6 @@ void Sim::generate_chains() {
     int i,j,k,m,m0;
     double x,y,z,R1,R2,R3;
 
-    printf("NUM %d\n", box.numChains);
     for (i=0;i<box.numChains;i++) {
         for (j=0;j<box.numDisks;j++) {
             m = i*box.numDisks+j;
@@ -645,6 +643,7 @@ void Sim::MCMove() {
     double translate = box.fracDisplace+box.fracRotate+box.fracBend+box.fracTwist+box.fracCurl+box.fracTranslate;
     double rand = RanGen->Random();
     
+    MC_rotate();
     if (rand < displace) {
         //MC_displace();
     } else if (rand < rotate) {
