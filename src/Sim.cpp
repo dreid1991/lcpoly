@@ -10,7 +10,6 @@
 
 enum MODE {PARTICLE, CONTINUUM};
 
-using namespace LAMMPS_NS;
 //using namespace std;
 
 Sim::Sim() {
@@ -643,17 +642,17 @@ void Sim::MCMove() {
     double rand = RanGen->Random();
     
     if (rand < displace) {
-      //  MC_displace();
+        MC_displace();
     } else if (rand < rotate) {
-      //  MC_rotate();
+        MC_rotate();
     } else if (rand < bend) {
-      //  MC_bend();
+        MC_bend();
     } else if (rand < twist) {
         MC_twist();
     } else if (rand < curl) {
-        //MC_curl();
+        MC_curl();
     } else if (rand < translate) {
-        //MC_translate();
+        MC_translate();
     }
 }
 
@@ -989,12 +988,17 @@ void Sim::MC_curl() { //Imparts curvature to the chain by "curling" it in a rand
         for (i=1;i<tot_move;i++) {
             j=i*dir;
             tot_theta = double(i)*theta;
+
+            AngleAxisd aa(tot_theta, axis);
+            Matrix3d rot;
+            rot = aa;
             //quat[0] = cos(tot_theta/2);
             for (k=0;k<3;k++) {
                 //quat[k+1] = axis[k]*sin(tot_theta/2);
                 dist1[k] = chain[core+j].rn[k] - chain[core+j-dir].rn[k];
             }
             //quat_vec_rot(dist2,dist1,quat);
+            dist2 = rot * dist1;
             for (k=0;k<3;k++) {
                 disk[ref+j].rn[k] = disk[ref+j-dir].rn[k] + dist2[k];
             }

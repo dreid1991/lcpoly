@@ -1,8 +1,6 @@
-#include "math_vector.h"
 #include "Grid.h"
 #include "defs.h"
 
-using namespace LAMMPS_NS;
 
 class Box {
 	public:
