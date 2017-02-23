@@ -643,13 +643,13 @@ void Sim::MCMove() {
     double rand = RanGen->Random();
     
     if (rand < displace) {
-        MC_displace();
+      //  MC_displace();
     } else if (rand < rotate) {
-        MC_rotate();
+      //  MC_rotate();
     } else if (rand < bend) {
-        MC_bend();
+      //  MC_bend();
     } else if (rand < twist) {
-        //MC_twist();
+        MC_twist();
     } else if (rand < curl) {
         //MC_curl();
     } else if (rand < translate) {
@@ -904,10 +904,15 @@ void Sim::MC_twist() { //Beginning at some point along the backbone, uniformly t
         for (i=first;i<=last;i++) {
             
             theta = (increment)*dtheta;
+            AngleAxisd aa(theta, disk[i].u);
+            Matrix3d rot;
+            rot = aa;
             //quat[0] = cos(theta/2);
             for (k=0;k<3;k++) {
               //  quat[k+1] = disk[i].u[k]*sin(theta/2);
             }
+            disk[i].f = rot * chain[j].f;
+            disk[i].v = rot * chain[j].v;
             //quat_vec_rot(disk[i].f,chain[j].f,quat);
             //quat_vec_rot(disk[i].v,chain[j].v,quat);
             j++;
