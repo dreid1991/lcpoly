@@ -24,7 +24,6 @@ Sim::Sim() {
 void Sim::MCSim() {
     box.numAccepts = 0;
     box.numRejects = 0;
-    printXYZ();
     for (box.cycle=0;box.cycle<box.numCycles;box.cycle++) {
         if (box.cycle%box.vizInterval == 0) {
             shiftCOM();
@@ -643,13 +642,12 @@ void Sim::MCMove() {
     double translate = box.fracDisplace+box.fracRotate+box.fracBend+box.fracTwist+box.fracCurl+box.fracTranslate;
     double rand = RanGen->Random();
     
-    MC_rotate();
     if (rand < displace) {
-        //MC_displace();
+        MC_displace();
     } else if (rand < rotate) {
-     //   MC_rotate();
+        MC_rotate();
     } else if (rand < bend) {
-        //MC_bend();
+        MC_bend();
     } else if (rand < twist) {
         //MC_twist();
     } else if (rand < curl) {
@@ -799,6 +797,15 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
             j++;
         }
         
+
+        /*
+            AngleAxisd aa(theta, disk[i].f);
+            Matrix3d rot;
+            rot = aa;
+            Vector3d v = rot * disk[i].u;
+            */
+
+
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
         calc_random_vector(axis); //Random unit vector for rotation
         //quat[0] = cos(theta/2);
@@ -806,16 +813,23 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
           //  quat[j+1] = axis[j]*sin(theta/2);
         }
        
+        AngleAxisd aa(theta, axis);
+        Matrix3d rot;
+        rot = aa;
         j = 0;
         for (i=first;i<=last;i++) {
             for (k=0;k<3;k++) {
                 dist1[k] = disk[i].rn[k] - disk[ref].rn[k];
             }
             //quat_vec_rot(dist2,dist1,quat);
+            dist2 = rot * dist1;
             for (k=0;k<3;k++) {
                 disk[i].rn[k] = disk[ref].rn[k] + dist2[k];
             }
             PBC_shift(disk[i].r, disk[i].rn);
+            disk[i].u = rot * chain[j].u;
+            disk[i].f = rot * chain[j].f;
+            disk[i].v = rot * chain[j].v;
             //quat_vec_rot(disk[i].u,chain[j].u,quat);
             //quat_vec_rot(disk[i].f,chain[j].f,quat);
             //quat_vec_rot(disk[i].v,chain[j].v,quat);
