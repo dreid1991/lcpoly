@@ -4,6 +4,7 @@
 
 class Box {
 	public:
+        Vector3d size;
        double x; //Dimensions of the periodic domain
        double y;
        double z;
@@ -15,7 +16,7 @@ class Box {
        int numChains; //Number of chains total in the simulation
        int numTotal; //Total disks in the simulation
 
-       double eps0,sig0,kappa,kappa_prime,chi,chi_prime,nu,mu; //Numbers used for calculating Gay-Berne interaction
+       double eps0,sig0,kappa,kappa_prime,gb_chi,gb_chi_prime,nu,mu; //Numbers used for calculating Gay-Berne interaction
        
        double kappa_b1, kappa_b2, kappa_t; //Parameters describing cost of bending and twisting for twistable worm like chain.
 
@@ -38,6 +39,8 @@ class Box {
        int mode; // 0->particle, 1->contin
        
        //continuum stuff
+       double con_chi;
+       double gridSize; //attempted discretization of the grid.  MAY DIFFER FROM ACTUAL DISCRETIZATION IN ORDER TO MAKE INTEGER NUMBER OF GRID CELLS.  Actual # stored in grid classes
        Grid<double> densities[2];
        Grid<Matrix3d> directorOrdering;
 

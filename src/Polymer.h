@@ -1,5 +1,11 @@
 #include <vector>
 class Polymer {
 public:
-    std::vector<int> idxs;
+    int first;
+    int last;
+    Polymer() {};
+    Polymer(int f, int l) {
+        first = f;
+        last = l;
+    }
 };

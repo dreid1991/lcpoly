@@ -9,8 +9,8 @@
 
 
 enum MODE {PARTICLE, CONTINUUM};
+using namespace std;
 
-//using namespace std;
 
 Sim::Sim() {
     read_input();
@@ -80,9 +80,9 @@ void Sim::read_input() {
       ret=fscanf(input,"%lf", &box.fracTwist);		 fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracCurl);		 fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracTranslate);   fgets(tt,2000,input);
-      ret=fscanf(input,"%lf", &box.x);               fgets(tt,2000,input);
-      ret=fscanf(input,"%lf", &box.y);               fgets(tt,2000,input);
-      ret=fscanf(input,"%lf", &box.z);               fgets(tt,2000,input);
+      ret=fscanf(input,"%lf", &box.size[0]);               fgets(tt,2000,input);
+      ret=fscanf(input,"%lf", &box.size[1]);               fgets(tt,2000,input);
+      ret=fscanf(input,"%lf", &box.size[2]);               fgets(tt,2000,input);
       ret=fscanf(input,"%d", &box.numDisks);         fgets(tt,2000,input);
       ret=fscanf(input,"%d", &box.numChains);        fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.T);               fgets(tt,2000,input);
@@ -117,8 +117,8 @@ void Sim::initialize_data() {
     box.mu = 2.0;
     box.kappa = 1.0/3;
     box.kappa_prime = 1.0/5;
-    box.chi = (box.kappa*box.kappa-1)/(box.kappa*box.kappa+1);
-    box.chi_prime = (sqrt(box.kappa_prime)-1)/(sqrt(box.kappa_prime)+1);
+    box.gb_chi = (box.kappa*box.kappa-1)/(box.kappa*box.kappa+1);
+    box.gb_chi_prime = (sqrt(box.kappa_prime)-1)/(sqrt(box.kappa_prime)+1);
     box.numTotal = box.numDisks*box.numChains;
     if (box.seed < 0) {
         box.seed = time(NULL);
@@ -144,7 +144,12 @@ void Sim::initialize_system() {
 }
 
 void Sim::allocate_memory() {
-    disk = new Disk[box.numTotal]; 
+    if (box.mode == MODE::CONTINUUM) {
+        //need to allocate grids
+
+    }
+    disk = vector<Disk>(box.numTotal);
+    poly = vector<Polymer>(box.numChains);
 }
 
 void Sim::generate_chains() {
@@ -152,13 +157,14 @@ void Sim::generate_chains() {
     double x,y,z,R1,R2,R3;
 
     for (i=0;i<box.numChains;i++) {
+        poly[i] = Polymer(i*box.numDisks, (i+1)*box.numDisks-1);
         for (j=0;j<box.numDisks;j++) {
             m = i*box.numDisks+j;
             if (j==0) { //First disk in chain has random placement and random orientation 
 
-                x = box.x * RanGen->Random();
-                y = box.y * RanGen->Random();
-                z = box.z * RanGen->Random();
+                x = box.size[0] * RanGen->Random();
+                y = box.size[1] * RanGen->Random();
+                z = box.size[2] * RanGen->Random();
 
                 disk[m].rn[0] = x;
                 disk[m].rn[1] = y;
@@ -396,9 +402,9 @@ double Sim::eps_func(double f0, double f1, double f2) {
     double v1,v2,v3;
     double out;
 
-    v1 = 1.0/sqrt(1-box.chi*box.chi*f0*f0);
-    v2 = (f1+f2)*(f1+f2)/(1+box.chi_prime*f0) + (f1-f2)*(f1-f2)/(1-box.chi_prime*f0);
-    v3 = 1-box.chi_prime*v2/2;
+    v1 = 1.0/sqrt(1-box.gb_chi*box.gb_chi*f0*f0);
+    v2 = (f1+f2)*(f1+f2)/(1+box.gb_chi_prime*f0) + (f1-f2)*(f1-f2)/(1-box.gb_chi_prime*f0);
+    v3 = 1-box.gb_chi_prime*v2/2;
 
     out = box.eps0 * v1*v3*v3;
     return out;
@@ -408,8 +414,8 @@ double Sim::eps_func(double f0, double f1, double f2) {
 double Sim::sig_func(double f0, double f1, double f2) {
     double v1,out;
 
-    v1 = (f1+f2)*(f1+f2)/(1+box.chi*f0) + (f1-f2)*(f1-f2)/(1-box.chi*f0);
-    out = box.sig0 / sqrt(1 - box.chi*v1/2);
+    v1 = (f1+f2)*(f1+f2)/(1+box.gb_chi*f0) + (f1-f2)*(f1-f2)/(1-box.gb_chi*f0);
+    out = box.sig0 / sqrt(1 - box.gb_chi*v1/2);
     return out;    
 
 }
@@ -494,9 +500,9 @@ double Sim::calc_dist(Vector3d r1, Vector3d r2) {
 
 void Sim::nearest_image_dist(Vector3d &r, Vector3d r1, Vector3d r2) { //r1 - r2 using the nearest image convention
     double dx,dy,dz;
-    double xhalf = box.x/2;
-    double yhalf = box.y/2;
-    double zhalf = box.z/2;
+    double xhalf = box.size[0]/2;
+    double yhalf = box.size[1]/2;
+    double zhalf = box.size[2]/2;
 
     dx = r1[0] - r2[0];
     dy = r1[1] - r2[1];
@@ -514,9 +520,9 @@ void Sim::nearest_image_dist(Vector3d &r, Vector3d r1, Vector3d r2) { //r1 - r2 
 }
 
 void Sim::PBC_shift(Vector3d &r_shift, Vector3d r) {
-    r_shift[0] = r[0] - box.x*floor(r[0]/box.x);
-    r_shift[1] = r[1] - box.x*floor(r[1]/box.y);
-    r_shift[2] = r[2] - box.x*floor(r[2]/box.z);
+    r_shift[0] = r[0] - box.size[0]*floor(r[0]/box.size[0]);
+    r_shift[1] = r[1] - box.size[0]*floor(r[1]/box.size[1]);
+    r_shift[2] = r[2] - box.size[0]*floor(r[2]/box.size[2]);
 }
 
 void Sim::adjust_single_u_vector(int i) {
@@ -627,7 +633,7 @@ void Sim::proj_vector(Vector3d &a, Vector3d n) {//Project vector a onto the plan
 
 
 void Sim::MCMoveContin() {
-    
+    //MCContin_Displace 
 }
 
 /***************************************************MONTE CARLO MOVES******************************************/
@@ -656,6 +662,8 @@ void Sim::MCMove() {
     }
 }
 
+
+
 void Sim::MC_displace() { //Displace a disk slightly without changing its orientation
     int i,j,k,flag,first,last;
     double rx,ry,rz;
@@ -672,13 +680,26 @@ void Sim::MC_displace() { //Displace a disk slightly without changing its orient
         ry = (2.0*RanGen->Random()-1.0)*delta;
         rz = (2.0*RanGen->Random()-1.0)*delta;
 
-        if (i%box.numDisks==0) {
-            first = i; last = i+1;
-        } else if ((i+1)%box.numDisks==0) {
-            first = i-1; last = i;
-        } else {
-            first = i-1; last = i+1;
+        for (Polymer &p : poly) {
+            if (i >= p.first && i <= p.last) { //then I found the right polymer!
+                if (i==p.first) {
+                    first = i;
+                    last = i+1;
+                } else if (i==p.last) {
+                    first = i-1;
+                    last = i;
+                } else if (p.first==p.last) {
+                    first = i;
+                    last = i;
+                } else {
+                    first = i-1;
+                    last = i+1;
+                }
+                break;
+
+            }
         }
+        //printf("%d %d %d\n", i, first, last);
         k=0;
         for (j=first; j<=last;j++) {
             save[k] = disk[j];
@@ -765,7 +786,6 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
     Vector3d axis; // Axis of rotation
     Vector3d dist1; // Contains distance vector for each disk from center of mass for rotation
     Vector3d dist2; // Contains new distance vector for each disk from center of mass for rotation
-    Vector4d quat;
     Disk *chain = new Disk[box.numDisks];
 
     for (int move=0;move<box.numChains;move++) {
@@ -906,14 +926,8 @@ void Sim::MC_twist() { //Beginning at some point along the backbone, uniformly t
             AngleAxisd aa(theta, disk[i].u);
             Matrix3d rot;
             rot = aa;
-            //quat[0] = cos(theta/2);
-            for (k=0;k<3;k++) {
-              //  quat[k+1] = disk[i].u[k]*sin(theta/2);
-            }
             disk[i].f = rot * chain[j].f;
             disk[i].v = rot * chain[j].v;
-            //quat_vec_rot(disk[i].f,chain[j].f,quat);
-            //quat_vec_rot(disk[i].v,chain[j].v,quat);
             j++;
             increment += dir;
 
@@ -1071,9 +1085,9 @@ void Sim::MC_translate() { //Randomly translate the entire polymer -- This is ma
         xCenter /= double(box.numDisks); //Calculation of center of mass of polymer
         yCenter /= double(box.numDisks);
         zCenter /= double(box.numDisks);
-        x = box.x*RanGen->Random(); //Calculation for new center of mass
-        y = box.y*RanGen->Random();
-        z = box.z*RanGen->Random(); 
+        x = box.size[0]*RanGen->Random(); //Calculation for new center of mass
+        y = box.size[1]*RanGen->Random();
+        z = box.size[2]*RanGen->Random(); 
         x -= xCenter;               //Change in center of mass
         y -= yCenter;
         z -= zCenter;
@@ -1103,6 +1117,8 @@ void Sim::MC_translate() { //Randomly translate the entire polymer -- This is ma
   
 
 }
+
+
 /**************************************************************************************************************/
 
 
@@ -1123,9 +1139,9 @@ void Sim::shiftCOM() { //Shifts the center of mass of all the nonperiodic coordi
         xCenter /= double(box.numDisks);
         yCenter /= double(box.numDisks);
         zCenter /= double(box.numDisks);
-        dx = box.x*floor(xCenter/box.x);
-        dy = box.y*floor(yCenter/box.y);
-        dz = box.z*floor(zCenter/box.z);
+        dx = box.size[0]*floor(xCenter/box.size[0]);
+        dy = box.size[1]*floor(yCenter/box.size[1]);
+        dz = box.size[2]*floor(zCenter/box.size[2]);
         for (j=0;j<box.numDisks;j++) {
             m = i*box.numDisks+j;
             disk[m].rn[0] -= dx;
@@ -1238,12 +1254,12 @@ void Sim::printPOV() {
     FILE *pov = fopen("disks.xyz","w");
     fprintf(pov, "ITEM: TURN\n%d\nITEM: NUMBER OF ATOMS\n%d\nITEM: BOX BOUNDS\n-10 10\n-10 10\n-10 10\nITEM: ATOMS\n",box.cycle,box.numTotal);
 
-    double scalex = 10.0/(box.x/2);
-    double scaley = 10.0/(box.y/2);
-    double scalez = 10.0/(box.z/2);
+    double scalex = 10.0/(box.size[0]/2);
+    double scaley = 10.0/(box.size[1]/2);
+    double scalez = 10.0/(box.size[2]/2);
 
     for (int i=0;i<box.numTotal;i++) {
-        fprintf(pov,"%d 1 %f %f %f %f %f %f\n", i, (disk[i].r[0]-box.x/2)*scalex, (disk[i].r[1]-box.y/2)*scaley, (disk[i].r[2]-box.z/2)*scalez, disk[i].f[0], disk[i].f[1], disk[i].f[2]); 
+        fprintf(pov,"%d 1 %f %f %f %f %f %f\n", i, (disk[i].r[0]-box.size[0]/2)*scalex, (disk[i].r[1]-box.size[1]/2)*scaley, (disk[i].r[2]-box.size[2]/2)*scalez, disk[i].f[0], disk[i].f[1], disk[i].f[2]); 
     }
     fclose(pov);
 }

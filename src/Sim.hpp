@@ -2,11 +2,16 @@
 #include "Box.hpp"
 #include "mersenne.h"
 #include "defs.h"
+#include <vector>
+#include <utility>  //pair
+#include "Polymer.h"
 
+//typedef std::vector<std::pair<int, Disk> > StoredState; //vector of idx and disk pairs, for resetting after a rejected move
 class Sim {
 	public:
         Box box;
-        Disk *disk;
+        std::vector<Disk> disk;
+        std::vector<Polymer> poly;
         CRandomMersenne *RanGen;
 
         Sim();
@@ -41,7 +46,9 @@ class Sim {
         void adjust_u_vectors(int);
         void proj_vector(Vector3d &a, Vector3d n);
 
+
         void MCMoveContin();
+
 
         void MCMove();
         void MC_displace();
