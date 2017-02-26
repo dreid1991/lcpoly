@@ -1,7 +1,7 @@
 -1	Random number seed
 0	0 to start randomly, 1 to read checkpoint
-10000	Number of Monte Carlo Cycles
-100	Interval after which data is outputted
+10	Number of Monte Carlo Cycles
+10	Interval after which data is outputted
 1000	Interval after which checkpoint file is made
 0.2	Fraction of displace moves
 0.2	Fraction of rotation moves
@@ -9,11 +9,11 @@
 0.2	Fraction of twist moves
 0.1	Fraction of curl moves
 0.1	Fraction of translate moves
-20.0	Box length in x direction
-20.0	Box length in y direction
-20.0	Box length in z direction
-10	Number of disks on a chain
-1	Number of chains in the simulation
+25.0	Box length in x direction
+25.0	Box length in y direction
+25.0	Box length in z direction
+3	Number of disks on a chain
+370  Number of chains in the simulation
 1.88	Reduced temperature
 1.0	Epsilon for potential
 1.0	Sigma for potential
@@ -22,6 +22,10 @@
 2.47	Twisting potential parameter
 4000	Harmonic bond spring constant
 0.64	Minimum energy distance between harmonic bonds
-20	Cutoff distance for GB potential
+5	Cutoff distance for GB potential
 5	Distance to exclude non-bonded interactions for disks on the same chain
-0	sim mode.  0->particle, 1->contin
+1 mode, 0->particle 1->contin
+3 box grid size
+1 contin resistance to compression
+1 contin chi
+1 lc u ordering strength

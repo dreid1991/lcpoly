@@ -8,6 +8,7 @@ class Disk {
         Vector3d u; //Vector tangent to the polymer 
         Vector3d f; //Vector normal to the disk (used for Gay-Berne calculations)
         Vector3d v; //Vector normal to u and f
+        int type; //0 or 1
 
         /* Using this to store energy just makes stuff too complicated
         double GB_energy; //Gay-Berne potential energy of the system that would be lost if this particle disappeared

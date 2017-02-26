@@ -18,7 +18,6 @@ public:
             for (int i=0; i<3; i++) {
                 ns[i] = floor(size[i] / estDs[i]);
             }
-            Vector3d nsd = ns;
             for (int i=0; i<3; i++) {
                 ds[i] = size[i] / ns[i];
             }
@@ -48,5 +47,8 @@ public:
         }
         T &operator()(Vector3d pos) {
             return (*this)(coord(pos));
+        }
+        double volCell() {
+            return ds[0]*ds[1]*ds[2];
         }
 };

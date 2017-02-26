@@ -34,6 +34,9 @@ class Sim {
         double calc_bond_total();
         double calc_wlc_total();
         double calc_GB(Disk d1,Disk d2);
+
+        double calc_eng_contin_total();
+
         double eps_func(double,double,double);
         double sig_func(double,double,double);
         double calc_bond(Disk d1, Disk d2);
@@ -47,8 +50,29 @@ class Sim {
         void proj_vector(Vector3d &a, Vector3d n);
 
 
-        void MCMoveContin();
 
+        void set_bulk_density();
+        void set_density();
+        void add_density(Polymer &);
+        void sub_density(Polymer &);
+        void modify_density(Polymer &, int);
+
+        void set_align_tensor_u();
+        void add_align_tensor_u(Polymer &);
+        void sub_align_tensor_u(Polymer &);
+        void modify_align_tensor_u(Polymer &, int);
+        
+        void add_all_grids(Polymer &p);
+        void sub_all_grids(Polymer &p);
+
+        double calc_comp_total();
+        double calc_chi_total();
+        double calc_align_u_total();
+
+        void MCMoveContin();
+        void MC_contin_displace(); 
+        void MC_contin_rotate(); 
+        void MC_contin_translate();
 
         void MCMove();
         void MC_displace();

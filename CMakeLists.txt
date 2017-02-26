@@ -4,7 +4,7 @@ project (lcpoly)
 
 file (GLOB SOURCES "src/*cpp")
 #REMEMBER OPT FLAGS
-set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fpic -Wno-unused-result -O3")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fpic -Wno-unused-result -g -O3")
 
 
 add_executable(lcpoly ${SOURCES})

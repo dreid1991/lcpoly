@@ -42,7 +42,7 @@ void Sim::MCSim() {
     }
     writeEnergy();
     dumpData();
-    printXYZ();
+   // printXYZ();
     printPOV();
     printf("Percent Acceptance: %f\n",double(box.numAccepts)/double(box.numAccepts+box.numRejects));
 }
@@ -96,6 +96,10 @@ void Sim::read_input() {
       ret=fscanf(input,"%lf", &box.r_cut);           fgets(tt,2000,input);
       ret=fscanf(input,"%d",  &box.excludeLength);   fgets(tt,2000,input);
       ret=fscanf(input,"%d",  &box.mode);           fgets(tt,2000,input);
+      ret=fscanf(input,"%lf",  &box.gridSize);           fgets(tt,2000,input);
+      ret=fscanf(input,"%lf",  &box.compressibility);           fgets(tt,2000,input);
+      ret=fscanf(input,"%lf",  &box.con_chi);           fgets(tt,2000,input);
+      ret=fscanf(input,"%lf",  &box.lc_u_ordering);           fgets(tt,2000,input);
       fgets(tt,2000,input);fgets(tt,2000,input);
 
       fclose(input);
@@ -128,7 +132,11 @@ void Sim::initialize_data() {
 }
 
 void Sim::initialize_system() {
-    double E_nb,E_bond,E_wlc;
+    double E_nb,E_bond,E_wlc,E_comp,E_chi,E_align;
+    E_nb = 0;
+    E_comp = 0;
+    E_chi = 0;
+    E_align = 0;
 
     if (box.checkpoint == 1 && fopen("traj.bin","rb")!=NULL) {
         readCheckpoint();
@@ -137,15 +145,30 @@ void Sim::initialize_system() {
         allocate_memory();
         generate_chains();
     }
-    E_nb = calc_GB_total();
+    if (box.mode == MODE::PARTICLE) {
+        E_nb = calc_GB_total();
+    }
+    if (box.mode == MODE::CONTINUUM) {
+        //set po
+        set_bulk_density();
+        set_density();
+        set_align_tensor_u();
+
+        E_comp = calc_comp_total();
+     //   E_chi = calc_chi_total();
+        E_align = calc_align_u_total();
+    }
     E_bond = calc_bond_total();
     E_wlc = calc_wlc_total();
-    box.E_tot = E_nb + E_bond + E_wlc;
+    box.E_tot = E_nb + E_bond + E_wlc + E_comp + E_chi + E_align;
 }
 
 void Sim::allocate_memory() {
     if (box.mode == MODE::CONTINUUM) {
         //need to allocate grids
+        box.densities[0] = Grid<double>(box.size, box.gridSize);
+        box.densities[1] = Grid<double>(box.size, box.gridSize);
+        box.alignTensorsU = Grid<Matrix3d>(box.size, box.gridSize);
 
     }
     disk = vector<Disk>(box.numTotal);
@@ -184,6 +207,7 @@ void Sim::generate_chains() {
                     disk[m].v[k] = disk[m-1].v[k];
 
                     disk[m].rn[k] = disk[m-1].rn[k] + box.r0*disk[m-1].u[k]; 
+                    disk[m].type = 0; //all of type 0 for now
                 }
                 
                 PBC_shift(disk[m].r,disk[m].rn);
@@ -191,6 +215,21 @@ void Sim::generate_chains() {
             }
         }
     }
+    /*
+    disk[0].rn = {0, 0, 0};
+    disk[1].rn = {1, 0, 0};
+    disk[0].u = disk[1].rn - disk[0].rn;
+    disk[1].u = disk[0].rn - disk[1].rn;
+
+    disk[2].rn = {0, 0, 0};
+    disk[3].rn = {1, 0, 0};
+    disk[2].u = disk[2].rn - disk[3].rn;
+    disk[3].u = disk[2].rn - disk[3].rn;
+    */
+   // disk[2].f = disk[0].f;
+   // disk[3].f = disk[1].f;
+   // disk[2].v = disk[0].v;
+   // disk[3].v = disk[1].v;
 }
 
 void Sim::calc_random_vector(Vector3d &b) {
@@ -252,13 +291,137 @@ double Sim::calc_GB_total() { // Does not double count the energy
     return energy;
 }
 
+
+
+void Sim::add_all_grids(Polymer &p) {
+    add_density(p);
+    add_align_tensor_u(p);
+}
+void Sim::sub_all_grids(Polymer &p) {
+    sub_density(p);
+    sub_align_tensor_u(p);
+}
+
+void Sim::set_bulk_density() {
+    double vol = box.size[0]*box.size[1]*box.size[2];
+    box.bulkDens = disk.size() / vol;
+}
+void Sim::set_density() {
+    for (int i=0; i<2; i++) {
+        box.densities[i].reset_grid(0);
+    }
+    Polymer p(0, disk.size()-1);
+    add_density(p);
+}
+
+void Sim::add_density(Polymer &p) {
+    modify_density(p, 1);
+}
+void Sim::sub_density(Polymer &p) {
+    modify_density(p, -1);
+}
+
+void Sim::modify_density(Polymer &p, int sign) {
+    //OMG REMEMBER PBC SHIFT.  SAME FOR ALIGN
+    double invVolCell = 1.0 / box.densities[0].volCell();
+    double perItem = invVolCell / box.bulkDens;
+    for (int i=p.first; i<=p.last; i++) {
+        PBC_shift(disk[i].r, disk[i].rn);
+        box.densities[disk[i].type](disk[i].r) += sign * perItem;
+    }
+}
+
+void Sim::set_align_tensor_u() {
+    Matrix3d zero = Matrix3d::Zero();
+    box.alignTensorsU.reset_grid(zero);
+
+    Polymer p(0, disk.size()-1);
+    add_align_tensor_u(p);
+}
+
+void Sim::add_align_tensor_u(Polymer &p) {
+    modify_align_tensor_u(p, 1);
+}
+
+void Sim::sub_align_tensor_u(Polymer &p) {
+    modify_align_tensor_u(p, -1);
+}
+
+void Sim::modify_align_tensor_u(Polymer &p, int sign) {
+    double invDens = 1 / box.bulkDens;
+    Matrix3d diag;
+    diag << 0.5, 0  , 0  ,
+            0  , 0.5, 0  ,
+            0  , 0  , 0.5;
+    for (int i=p.first; i<=p.last; i++) {
+        Disk &d = disk[i];
+        Matrix3d outerProd = d.u * (d.u.transpose() * 1.5);
+        //cout << "PARTICLE" << endl;
+        //cout << d.u << endl << endl << endl;;
+        outerProd -= diag;
+        //cout << outerProd << endl << endl;
+        PBC_shift(disk[i].r, disk[i].rn);
+        Vector3d pos = {1, 1, 1};
+        box.alignTensorsU(pos) += outerProd * sign * invDens;
+        //cout << "running total" << endl;
+        //cout << box.alignTensorsU(d.r) << endl << endl;;
+        //cout << "sign " << sign << " dens " << box.bulkDens << endl;
+     //   cout << "TOTAL" << endl;
+     //   cout << outerProd << endl << endl;
+    }
+
+
+}
+
+
+double Sim::calc_comp_total() {
+    double volCell = box.densities[0].volCell();
+    double sum = 0;
+    for (int i=0; i<box.densities[0].vals.size(); i++) {
+        double x = 1 - box.densities[0].vals[i] - box.densities[1].vals[i];
+        sum += x*x;
+    }
+    sum *= volCell * box.compressibility/2.0 * box.bulkDens; //bulkDens in the po term out in front of the integral
+    return sum;
+}
+
+double Sim::calc_align_u_total() {
+    double volCell = box.densities[0].volCell();
+    double sum = 0;
+    for (Matrix3d &m : box.alignTensorsU.vals) {
+       // cout << "BOX" << endl;
+       // cout << m << endl << endl;
+        sum += m.cwiseProduct(m.transpose()).sum(); //tensor contraction
+    }
+    //cout << "SUM IS " << sum << endl;
+    sum *= -volCell * box.lc_u_ordering * box.bulkDens / 3.0;
+    //cout << "bulk " << box.bulkDens << endl;
+    //cout << "SUM IS " << sum << endl;
+    return -sum;
+
+}
+
+double Sim::calc_chi_total() {
+    double volCell = box.densities[0].volCell();
+    double sum = 0;
+    for (int i=0; i<box.densities[0].vals.size(); i++) {
+        double x = box.densities[0].vals[i] * box.densities[1].vals[i];
+        sum += x;
+    }
+    sum *= volCell * box.con_chi;
+    return sum;
+
+}
+
 double Sim::calc_disk_energy(int i) { //Computes all energy associated with a single disk (GB, bond, wlc) and updates its values
     int flag;
     double wlc = 0.0;
     double bond = 0.0;
-    double GB;
+    double GB = 0;
     double tot;
-    GB = calc_disk_GB_energy(i);
+    if (box.mode == MODE::PARTICLE) {
+        GB = calc_disk_GB_energy(i);
+    }
 
     if (i%box.numDisks==0) {
         flag = 0;
@@ -310,11 +473,15 @@ double Sim::calc_disk_interval_energy(int i, int j) { //Calculate all the energy
     }
 
     for (k=i;k<j;k++) {
-        GB += calc_disk_GB_energy_without(k,i); //Prevents double counting of energies
+        if (box.mode == MODE::PARTICLE) {
+            GB += calc_disk_GB_energy_without(k,i); //Prevents double counting of energies
+        }
         bond += calc_bond(disk[k],disk[k+1]);
         wlc += calc_wlc(disk[k],disk[k+1]);
     }
-    GB += calc_disk_GB_energy_without(j,i);
+    if (box.mode == MODE::PARTICLE) {
+        GB += calc_disk_GB_energy_without(j,i);
+    }
     if (flag2==0) {
         bond += calc_bond(disk[j],disk[j+1]);
         wlc += calc_wlc(disk[j],disk[j+1]);
@@ -345,6 +512,24 @@ double Sim::calc_disk_GB_energy_without(int i, int start_exclude) { //Calculates
     }
     return energy;
 }
+
+double Sim::calc_eng_contin_total() {
+    double E_bond,E_wlc,E_comp,E_chi,E_align;
+    E_comp = 0;
+    E_chi = 0;
+    E_align = 0;
+
+
+    set_density();
+    E_comp = calc_comp_total();
+    //   E_chi = calc_chi_total();
+    E_align = calc_align_u_total();
+    E_bond = calc_bond_total();
+    E_wlc = calc_wlc_total();
+    return E_bond + E_wlc + E_comp + E_chi + E_align;
+}
+
+
 
 double Sim::calc_bond_total() {
     int i,j,m;
@@ -554,17 +739,16 @@ void Sim::adjust_single_u_vector(int i) {
         }
 
 }
-
 void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to the u vector to make sure that it is tangent to the chain. This function corrects it to make sure that it works 
-                                    //WARNING: Will not work for chains with only two disks
-        if (i%box.numDisks==0) { 
+                                    //WARNING: Need 4 or more disks to make this work
+        if (i%box.numDisks==0) { //disk is at start of chain 
             disk[i].u[0] = disk[i+1].rn[0] - disk[i].rn[0];
             disk[i].u[1] = disk[i+1].rn[1] - disk[i].rn[1];
             disk[i].u[2] = disk[i+1].rn[2] - disk[i].rn[2];
 
             disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            disk[i].v = disk[i].u.cross(disk[i].f);
+            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
 
             disk[i+1].u[0] = (disk[i+2].rn[0] - disk[i].rn[0])/2;
             disk[i+1].u[1] = (disk[i+2].rn[1] - disk[i].rn[1])/2;
@@ -572,16 +756,16 @@ void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to 
 
             disk[i+1].u.normalize();
             proj_vector(disk[i+1].f,disk[i+1].u);
-            disk[i+1].v = disk[i+1].u.cross(disk[i+1].f);
+            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
 
-        } else if ((i+1)%box.numDisks==0) {
+        } else if ((i+1)%box.numDisks==0) { //Disk is at end of chain
             disk[i].u[0] = disk[i].rn[0] - disk[i-1].rn[0];
             disk[i].u[1] = disk[i].rn[1] - disk[i-1].rn[1];
             disk[i].u[2] = disk[i].rn[2] - disk[i-1].rn[2];
 
             disk[i].u.normalize();
             proj_vector(disk[i].f,disk[i].u);
-            disk[i].v = disk[i].u.cross(disk[i].f);
+            calc_cross_vector(disk[i].v,disk[i].u,disk[i].f);
 
 
             disk[i-1].u[0] = (disk[i].rn[0] - disk[i-2].rn[0])/2;
@@ -590,7 +774,45 @@ void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to 
 
             disk[i-1].u.normalize();
             proj_vector(disk[i-1].f,disk[i-1].u);
-            disk[i-1].v = disk[i-1].u.cross(disk[i-1].f);
+            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
+
+        } else if ((i-1)%box.numDisks==0) { //Disk is second in chain -- need to be careful about preceding disk
+            disk[i+1].u[0] = (disk[i+2].rn[0] - disk[i].rn[0])/2;
+            disk[i+1].u[1] = (disk[i+2].rn[1] - disk[i].rn[1])/2;
+            disk[i+1].u[2] = (disk[i+2].rn[2] - disk[i].rn[2])/2;
+
+            disk[i+1].u.normalize();
+            proj_vector(disk[i+1].f,disk[i+1].u);
+            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
+
+
+            disk[i-1].u[0] = (disk[i].rn[0] - disk[i-1].rn[0]);
+            disk[i-1].u[1] = (disk[i].rn[1] - disk[i-1].rn[1]);
+            disk[i-1].u[2] = (disk[i].rn[2] - disk[i-1].rn[2]);
+
+            disk[i-1].u.normalize();
+            proj_vector(disk[i-1].f,disk[i-1].u);
+            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
+
+        } else if ((i+2)%box.numDisks==0) { //Disk is second from last in chain -- need to be careful about disk after this one
+            disk[i+1].u[0] = (disk[i+1].rn[0] - disk[i].rn[0]);
+            disk[i+1].u[1] = (disk[i+1].rn[1] - disk[i].rn[1]);
+            disk[i+1].u[2] = (disk[i+1].rn[2] - disk[i].rn[2]);
+
+            disk[i+1].u.normalize();
+            proj_vector(disk[i+1].f,disk[i+1].u);
+            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
+
+
+            disk[i-1].u[0] = (disk[i].rn[0] - disk[i-2].rn[0])/2;
+            disk[i-1].u[1] = (disk[i].rn[1] - disk[i-2].rn[1])/2;
+            disk[i-1].u[2] = (disk[i].rn[2] - disk[i-2].rn[2])/2;
+
+            disk[i-1].u.normalize();
+            proj_vector(disk[i-1].f,disk[i-1].u);
+            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
+
+
 
         } else {
             disk[i+1].u[0] = (disk[i+2].rn[0] - disk[i].rn[0])/2;
@@ -599,7 +821,7 @@ void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to 
 
             disk[i+1].u.normalize();
             proj_vector(disk[i+1].f,disk[i+1].u);
-            disk[i+1].v = disk[i+1].u.cross(disk[i+1].f);
+            calc_cross_vector(disk[i+1].v,disk[i+1].u,disk[i+1].f);
 
 
             disk[i-1].u[0] = (disk[i].rn[0] - disk[i-2].rn[0])/2;
@@ -608,7 +830,7 @@ void Sim::adjust_u_vectors(int i) { //Some of the moves require a correction to 
 
             disk[i-1].u.normalize();
             proj_vector(disk[i-1].f,disk[i-1].u);
-            disk[i-1].v = disk[i-1].u.cross(disk[i-1].f);
+            calc_cross_vector(disk[i-1].v,disk[i-1].u,disk[i-1].f);
 
 
         }
@@ -631,8 +853,196 @@ void Sim::proj_vector(Vector3d &a, Vector3d n) {//Project vector a onto the plan
 
 
 
+void Sim::MC_contin_displace() { //Displace a disk slightly without changing its orientation
+    int i,j,k,flag,first,last;
+    double rx,ry,rz;
+    double delta = box.r0/2; //Maximum displacement distance in any direction
+    double pre_energy, post_energy, dE;
+    
+    vector<Disk> chain;
+    for (int move=0;move<box.numTotal;move++) {
+        do {
+            i = double(box.numTotal)*RanGen->Random();
+        } while(i >= box.numTotal);
+        
+        rx = (2.0*RanGen->Random()-1.0)*delta;
+        ry = (2.0*RanGen->Random()-1.0)*delta;
+        rz = (2.0*RanGen->Random()-1.0)*delta;
+        Polymer p;
+        for (Polymer &pCheck : poly) {
+            if (i >= pCheck.first && i <= pCheck.last) { //then I found the right polymer!
+                p = pCheck;
+                if (i==p.first) {
+                    first = i;
+                    last = i+1;
+                } else if (i==p.last) {
+                    first = i-1;
+                    last = i;
+                } else if (p.first==p.last) {
+                    first = i;
+                    last = i;
+                } else {
+                    first = i-1;
+                    last = i+1;
+                }
+                break;
+
+            }
+        }
+        chain.clear();
+        int n = p.last - p.first + 1;
+        chain.resize(n);
+        for (j=0;j<n;j++) {
+            chain[j] = disk[p.first+j];
+        }
+        //printf("%d %d %d\n", i, first, last);
+        
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        sub_all_grids(p);
+        
+        disk[i].rn[0] += rx;
+        disk[i].rn[1] += ry;
+        disk[i].rn[2] += rz;
+        
+        PBC_shift(disk[i].r, disk[i].rn);
+      
+        adjust_u_vectors(i);
+
+        add_all_grids(p);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        dE = post_energy - pre_energy;
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE;
+            box.numAccepts++;
+        } else { //Reverse changes
+            sub_all_grids(p);
+            for (i=0;i<n;i++) {
+                disk[p.first+i] = chain[i];
+            }
+            add_all_grids(p);
+            box.numRejects++;
+        }
+         
+        
+    }
+
+}
+
+
+void Sim::MC_contin_rotate() { //Randomly rotate a disk about some axis without changing its center of mass
+    int i,j,flag;
+    double max_theta = PI/2; //Don't want more than a 90 degree rotation around any axis
+    double theta;
+    double pre_energy, post_energy, dE;
+    Disk save;
+    Vector3d axis;
+
+    for (int move=0;move<box.numTotal;move++) {
+        do {
+            i = double(box.numTotal)*RanGen->Random();
+        } while(i >= box.numTotal);
+        
+        theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
+       
+        //WHEN I ADD IN PI-PI STACKING I WILL NEED TO PUT GRID ENERGIES HERE
+        pre_energy = calc_disk_energy(i);
+        save = disk[i];
+        AngleAxisd aaU(theta, save.u);
+        Matrix3d rot; 
+        rot = aaU;
+        disk[i].f = rot * save.f;
+        disk[i].v = rot * save.v;
+
+
+        post_energy = calc_disk_energy(i);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            disk[i] = save;
+            box.numRejects++;
+        }
+           
+
+    }
+}
+
+void Sim::MC_contin_translate() {
+    int rand_chain,i,j,k,flag,dir,core,disk_length,ref,first,last,tot_move;
+    double x,y,z,xCenter,yCenter,zCenter;   
+    double pre_energy, post_energy, dE;
+    Vector3d dist1; // Contains distance Vector3d for each disk from center of mass for rotation
+    Vector3d dist2; // Contains new distance Vector3d for each disk from center of mass for rotation
+    vector<Disk> chain;
+    for (int move=0;move<box.numChains;move++) {
+
+        do {
+            rand_chain = double(poly.size())*RanGen->Random();
+        } while(rand_chain >= poly.size());
+
+        chain.clear();
+        Polymer &p = poly[rand_chain];
+        int n = p.last - p.first + 1;
+        chain.resize(n);
+        for (i=0;i<n;i++) {
+            chain[i] = disk[p.first+i];
+        }
+
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        sub_all_grids(p);
+        xCenter = 0.0;
+        yCenter = 0.0;
+        zCenter = 0.0;
+        for (j=first;j<=last;j++) {
+            xCenter += disk[j].rn[0];
+            yCenter += disk[j].rn[1];
+            zCenter += disk[j].rn[2];
+        }
+        xCenter /= double(n); //Calculation of center of mass of polymer
+        yCenter /= double(n);
+        zCenter /= double(n);
+        x = box.size[0]*RanGen->Random(); //Calculation for new center of mass
+        y = box.size[1]*RanGen->Random();
+        z = box.size[2]*RanGen->Random(); 
+        x -= xCenter;               //Change in center of mass
+        y -= yCenter;
+        z -= zCenter;
+        for (j=p.first;j<=p.last;j++) {
+            disk[j].rn[0] += x;
+            disk[j].rn[1] += y;
+            disk[j].rn[2] += z;
+            PBC_shift(disk[j].r,disk[j].rn);
+        }
+
+        add_all_grids(p);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            sub_all_grids(p);
+            for (i=0;i<n;i++) {
+                disk[p.first+i] = chain[i];
+            }
+            add_all_grids(p);
+            box.numRejects++;
+        }
+    }
+
+
+}
+
 
 void Sim::MCMoveContin() {
+    MC_contin_displace();
+    MC_contin_rotate();
+    MC_contin_translate();
     //MCContin_Displace 
 }
 
@@ -646,7 +1056,8 @@ void Sim::MCMove() {
     double curl = box.fracDisplace+box.fracRotate+box.fracBend+box.fracTwist+box.fracCurl;
     double translate = box.fracDisplace+box.fracRotate+box.fracBend+box.fracTwist+box.fracCurl+box.fracTranslate;
     double rand = RanGen->Random();
-    
+        MC_displace();
+   /* 
     if (rand < displace) {
         MC_displace();
     } else if (rand < rotate) {
@@ -660,6 +1071,7 @@ void Sim::MCMove() {
     } else if (rand < translate) {
         MC_translate();
     }
+    */
 }
 
 
@@ -816,15 +1228,6 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
             j++;
         }
         
-
-        /*
-            AngleAxisd aa(theta, disk[i].f);
-            Matrix3d rot;
-            rot = aa;
-            Vector3d v = rot * disk[i].u;
-            */
-
-
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
         calc_random_vector(axis); //Random unit vector for rotation
         //quat[0] = cos(theta/2);
@@ -840,7 +1243,6 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
             for (k=0;k<3;k++) {
                 dist1[k] = disk[i].rn[k] - disk[ref].rn[k];
             }
-            //quat_vec_rot(dist2,dist1,quat);
             dist2 = rot * dist1;
             for (k=0;k<3;k++) {
                 disk[i].rn[k] = disk[ref].rn[k] + dist2[k];
@@ -849,9 +1251,6 @@ void Sim::MC_bend() { //Beginning at some point along the backbone, bend the cha
             disk[i].u = rot * chain[j].u;
             disk[i].f = rot * chain[j].f;
             disk[i].v = rot * chain[j].v;
-            //quat_vec_rot(disk[i].u,chain[j].u,quat);
-            //quat_vec_rot(disk[i].f,chain[j].f,quat);
-            //quat_vec_rot(disk[i].v,chain[j].v,quat);
             j++;
 
         }
@@ -1284,6 +1683,7 @@ void Sim::dumpData() {
 /************************************TRAJECTORY CHECKPOINTING FUNCTIONS****************************************/
 
 void Sim::printCheckpoint() {
+    /*
     FILE *out = fopen("traj.bin","wb");
     int i;
     fwrite(&box, sizeof(Box), 1 , out);
@@ -1291,6 +1691,7 @@ void Sim::printCheckpoint() {
         fwrite(&disk[i], sizeof(Disk), 1 , out);
     }
     fclose(out);
+    */
 }
 
 void Sim::readCheckpoint() {
