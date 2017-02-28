@@ -1042,7 +1042,7 @@ void Sim::MC_contin_translate() {
 void Sim::MCMoveContin() {
     MC_contin_displace();
     MC_contin_rotate();
-    MC_contin_translate();
+    //MC_contin_translate();
     //MCContin_Displace 
 }
 
