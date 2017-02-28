@@ -185,7 +185,7 @@ void Sim::generate_chains() {
             m = i*box.numDisks+j;
             if (j==0) { //First disk in chain has random placement and random orientation 
 
-                x = box.size[0] * RanGen->Random();
+                x = box.size[0] * RanGen->Random() * 0.5;
                 y = box.size[1] * RanGen->Random();
                 z = box.size[2] * RanGen->Random();
 
@@ -706,8 +706,8 @@ void Sim::nearest_image_dist(Vector3d &r, Vector3d r1, Vector3d r2) { //r1 - r2 
 
 void Sim::PBC_shift(Vector3d &r_shift, Vector3d r) {
     r_shift[0] = r[0] - box.size[0]*floor(r[0]/box.size[0]);
-    r_shift[1] = r[1] - box.size[0]*floor(r[1]/box.size[1]);
-    r_shift[2] = r[2] - box.size[0]*floor(r[2]/box.size[2]);
+    r_shift[1] = r[1] - box.size[1]*floor(r[1]/box.size[1]);
+    r_shift[2] = r[2] - box.size[2]*floor(r[2]/box.size[2]);
 }
 
 void Sim::adjust_single_u_vector(int i) {
@@ -1043,7 +1043,7 @@ void Sim::MC_contin_translate() {
 void Sim::MCMoveContin() {
     MC_contin_displace();
     MC_contin_rotate();
-    //MC_contin_translate();
+    MC_contin_translate();
     //MCContin_Displace 
 }
 
