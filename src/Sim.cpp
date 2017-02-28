@@ -925,6 +925,7 @@ void Sim::MC_contin_displace() { //Displace a disk slightly without changing its
          
         
     }
+    cout << "comp eng %f " << calc_comp_total() << endl;
 
 }
 

@@ -1,5 +1,6 @@
 #include <vector>
 #include <Eigen/Dense>
+#include <iostream>
 template <class T>
 class Grid {
 public:
@@ -13,14 +14,13 @@ public:
             allocate();
         }
         Grid(Vector3d size, double gridSize) {
-            os = {0, 0, 0};
-            Vector3d estDs = size / gridSize;
             for (int i=0; i<3; i++) {
-                ns[i] = floor(size[i] / estDs[i]);
-            }
-            for (int i=0; i<3; i++) {
+                ns[i] = size[i] / gridSize;
                 ds[i] = size[i] / ns[i];
             }
+
+            printf("sizes %f %f %f %f \n", size[0], size[1], size[2], gridSize);
+            os = {0, 0, 0};
             allocate();
 
         }
