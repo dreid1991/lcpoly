@@ -1039,11 +1039,83 @@ void Sim::MC_contin_translate() {
 
 }
 
+void Sim::MC_contin_rotate_chain() { //Randomly rotate a disk about some axis without changing its center of mass
+    int i,j,flag;
+    double max_theta = PI/2; //Don't want more than a 90 degree rotation around any axis
+    double theta;
+    double pre_energy, post_energy, dE;
+    Vector3d axis, center;
+
+    vector<Disk> chain;
+    for (int move=0;move<box.numChains;move++) {
+        do {
+            i = double(box.numChains)*RanGen->Random();
+        } while(i >= box.numChains);
+        chain.clear();
+        Polymer &p = poly[i];
+        int n = p.last - p.first + 1;
+        chain.resize(n);
+        for (i=0;i<n;i++) {
+            chain[i] = disk[p.first+i];
+        }
+        theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
+       
+        //WHEN I ADD IN PI-PI STACKING I WILL NEED TO PUT GRID ENERGIES HERE
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        sub_all_grids(p);
+
+        calc_random_vector(axis); //Generate axis completely randomly
+        AngleAxisd aa(theta, axis);
+        Matrix3d rot; 
+        rot = aa;
+
+        center = {0, 0, 0};
+        for (i=p.first; i<=p.last; i++) {
+            center += disk[i].rn;
+        }
+        center = center / (p.last - p.first + 1);
+
+        for (i=p.first; i<=p.last; i++) {
+            //first rotate the directors
+            disk[i].u = rot * disk[i].u;
+            disk[i].f = rot * disk[i].f;
+            disk[i].v = rot * disk[i].v;
+            //then rotate the positions
+            Vector3d diff = disk[i].rn - center;
+            Vector3d diffNew = rot * diff;
+            disk[i].rn = center + diffNew;
+            PBC_shift(disk[j].r,disk[j].rn);
+        }
+
+        add_all_grids(p);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            sub_all_grids(p);
+            for (i=0;i<n;i++) {
+                disk[p.first+i] = chain[i];
+            }
+            add_all_grids(p);
+            box.numRejects++;
+        }
+           
+
+    }
+}
+
+
+
 
 void Sim::MCMoveContin() {
-    MC_contin_displace();
-    MC_contin_rotate();
-    MC_contin_translate();
+    //MC_contin_displace();
+    //MC_contin_rotate();
+    //MC_contin_translate();
+    MC_contin_rotate_chain();
     //MCContin_Displace 
 }
 

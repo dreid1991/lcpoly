@@ -73,6 +73,7 @@ class Sim {
         void MC_contin_displace(); 
         void MC_contin_rotate(); 
         void MC_contin_translate();
+        void MC_contin_rotate_chain();
 
         void MCMove();
         void MC_displace();
