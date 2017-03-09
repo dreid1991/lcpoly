@@ -185,14 +185,23 @@ void Sim::generate_chains() {
             m = i*box.numDisks+j;
             if (j==0) { //First disk in chain has random placement and random orientation 
 
-                x = box.size[0] * RanGen->Random() * 0.5;
+                /*
+                printf("SETTING POSITIONS MANUALLY\n");
+                if (i==0) {
+                    disk[m].rn = {3, 3, 3};
+                    disk[m].u = {1, 0, 0};
+                } else {
+                    disk[m].rn = {3, 3, 3};
+                    disk[m].u = {1, 0, 0};
+                }
+                */
+                x = box.size[0] * RanGen->Random();
                 y = box.size[1] * RanGen->Random();
                 z = box.size[2] * RanGen->Random();
 
                 disk[m].rn[0] = x;
                 disk[m].rn[1] = y;
                 disk[m].rn[2] = z;
-
                 PBC_shift(disk[m].r, disk[m].rn);
 
                 calc_random_vector(disk[m].u); //Generate u completely randomly
@@ -394,7 +403,7 @@ double Sim::calc_align_u_total() {
         sum += m.cwiseProduct(m.transpose()).sum(); //tensor contraction
     }
     //cout << "SUM IS " << sum << endl;
-    sum *= -volCell * box.lc_u_ordering * box.bulkDens / 3.0;
+    sum *= volCell * box.lc_u_ordering * box.bulkDens / 3.0;
     //cout << "bulk " << box.bulkDens << endl;
     //cout << "SUM IS " << sum << endl;
     return -sum;
