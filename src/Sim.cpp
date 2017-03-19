@@ -427,7 +427,7 @@ double Sim::calc_align_u_total() {
     for (Matrix3d &m : box.alignTensorsU.vals) {
        // cout << "BOX" << endl;
        // cout << m << endl << endl;
-        sum += m.cwiseProduct(m.transpose()).sum(); //tensor contraction
+        sum += m.cwiseProduct(m).sum(); //tensor contraction, but I don't need to take the transpose b/c matrix is symmetric.
     }
     //cout << "SUM IS " << sum << endl;
     sum *= volCell * box.lc_u_ordering * box.bulkDens / 3.0;
