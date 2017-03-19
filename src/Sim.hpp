@@ -61,6 +61,11 @@ class Sim {
         void add_align_tensor_u(Polymer &);
         void sub_align_tensor_u(Polymer &);
         void modify_align_tensor_u(Polymer &, int);
+
+        void set_count();
+        void add_count(Polymer &);
+        void sub_count(Polymer &);
+        void modify_count(Polymer &, int);
         
         void add_all_grids(Polymer &p);
         void sub_all_grids(Polymer &p);

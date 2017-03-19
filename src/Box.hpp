@@ -43,6 +43,7 @@ public:
     double gridSize; //attempted discretization of the grid.  MAY DIFFER FROM ACTUAL DISCRETIZATION IN ORDER TO MAKE INTEGER NUMBER OF GRID CELLS.  Actual # stored in grid classes
     Grid<double> densities[2];
     Grid<Matrix3d> alignTensorsU;
+    Grid<int> beadCounts;
 
 
 };

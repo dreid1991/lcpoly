@@ -305,10 +305,12 @@ double Sim::calc_GB_total() { // Does not double count the energy
 void Sim::add_all_grids(Polymer &p) {
     add_density(p);
     add_align_tensor_u(p);
+    add_count(p);
 }
 void Sim::sub_all_grids(Polymer &p) {
     sub_density(p);
     sub_align_tensor_u(p);
+    sub_count(p);
 }
 
 void Sim::set_bulk_density() {
@@ -356,6 +358,7 @@ void Sim::sub_align_tensor_u(Polymer &p) {
     modify_align_tensor_u(p, -1);
 }
 
+
 void Sim::modify_align_tensor_u(Polymer &p, int sign) {
     double invDens = 1 / box.bulkDens;
     Matrix3d diag;
@@ -369,9 +372,10 @@ void Sim::modify_align_tensor_u(Polymer &p, int sign) {
         //cout << d.u << endl << endl << endl;;
         outerProd -= diag;
         //cout << outerProd << endl << endl;
-        PBC_shift(disk[i].r, disk[i].rn);
-        Vector3d pos = {1, 1, 1};
-        box.alignTensorsU(pos) += outerProd * sign * invDens;
+        PBC_shift(d.r, d.rn);
+       // Vector3d pos = {1, 1, 1};
+       // cout << "WHAT IS THIS???" << endl;
+        box.alignTensorsU(d.r) += outerProd * sign * invDens;
         //cout << "running total" << endl;
         //cout << box.alignTensorsU(d.r) << endl << endl;;
         //cout << "sign " << sign << " dens " << box.bulkDens << endl;
@@ -382,6 +386,28 @@ void Sim::modify_align_tensor_u(Polymer &p, int sign) {
 
 }
 
+void Sim::set_count() {
+    box.beadCounts.reset_grid(0);
+    Polymer p(0, disk.size()-1);
+    add_count(p);
+}
+
+void Sim::add_count(Polymer &p) {
+    modify_count(p, 1);
+}
+
+void Sim::sub_count(Polymer &p) {
+    modify_count(p, -1);
+}
+
+void Sim::modify_count(Polymer &p, int sign) {
+    for (int i=p.first; i<=p.last; i++) {
+        Disk &d = disk[i];
+        PBC_shift(d.r, d.rn);
+
+    }
+
+}
 
 double Sim::calc_comp_total() {
     double volCell = box.densities[0].volCell();
@@ -391,6 +417,7 @@ double Sim::calc_comp_total() {
         sum += x*x;
     }
     sum *= volCell * box.compressibility/2.0 * box.bulkDens; //bulkDens in the po term out in front of the integral
+    cout << sum << endl;
     return sum;
 }
 
@@ -405,7 +432,7 @@ double Sim::calc_align_u_total() {
     //cout << "SUM IS " << sum << endl;
     sum *= volCell * box.lc_u_ordering * box.bulkDens / 3.0;
     //cout << "bulk " << box.bulkDens << endl;
-    //cout << "SUM IS " << sum << endl;
+    cout << "SUM IS " << sum << endl;
     return -sum;
 
 }
@@ -934,7 +961,7 @@ void Sim::MC_contin_displace() { //Displace a disk slightly without changing its
          
         
     }
-    cout << "comp eng %f " << calc_comp_total() << endl;
+    //cout << "comp eng %f " << calc_comp_total() << endl;
 
 }
 
@@ -1121,11 +1148,10 @@ void Sim::MC_contin_rotate_chain() { //Randomly rotate a disk about some axis wi
 
 
 void Sim::MCMoveContin() {
-    //MC_contin_displace();
-    //MC_contin_rotate();
-    //MC_contin_translate();
+    MC_contin_displace();
+    MC_contin_rotate();
+    MC_contin_translate();
     MC_contin_rotate_chain();
-    //MCContin_Displace 
 }
 
 /***************************************************MONTE CARLO MOVES******************************************/
