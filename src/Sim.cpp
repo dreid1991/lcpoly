@@ -169,6 +169,7 @@ void Sim::allocate_memory() {
         box.densities[0] = Grid<double>(box.size, box.gridSize);
         box.densities[1] = Grid<double>(box.size, box.gridSize);
         box.alignTensorsU = Grid<Matrix3d>(box.size, box.gridSize);
+        box.beadCounts = Grid<int>(box.size, box.gridSize);
 
     }
     disk = vector<Disk>(box.numTotal);
@@ -375,7 +376,7 @@ void Sim::modify_align_tensor_u(Polymer &p, int sign) {
         PBC_shift(d.r, d.rn);
        // Vector3d pos = {1, 1, 1};
        // cout << "WHAT IS THIS???" << endl;
-        box.alignTensorsU(d.r) += outerProd * sign * invDens;
+        box.alignTensorsU(d.r) += outerProd * sign;
         //cout << "running total" << endl;
         //cout << box.alignTensorsU(d.r) << endl << endl;;
         //cout << "sign " << sign << " dens " << box.bulkDens << endl;
@@ -404,9 +405,8 @@ void Sim::modify_count(Polymer &p, int sign) {
     for (int i=p.first; i<=p.last; i++) {
         Disk &d = disk[i];
         PBC_shift(d.r, d.rn);
-
+        box.beadCounts(d.r) += sign;
     }
-
 }
 
 double Sim::calc_comp_total() {
@@ -417,22 +417,21 @@ double Sim::calc_comp_total() {
         sum += x*x;
     }
     sum *= volCell * box.compressibility/2.0 * box.bulkDens; //bulkDens in the po term out in front of the integral
-    cout << sum << endl;
     return sum;
 }
 
 double Sim::calc_align_u_total() {
     double volCell = box.densities[0].volCell();
     double sum = 0;
-    for (Matrix3d &m : box.alignTensorsU.vals) {
-       // cout << "BOX" << endl;
-       // cout << m << endl << endl;
-        sum += m.cwiseProduct(m).sum(); //tensor contraction, but I don't need to take the transpose b/c matrix is symmetric.
+    for (int i=0; i<box.alignTensorsU.vals.size(); i++) {
+        if (box.beadCounts.vals[i]) {
+            Matrix3d avg = box.alignTensorsU.vals[i] / box.beadCounts.vals[i];
+            sum += avg.cwiseProduct(avg).sum(); //tensor contraction, but I don't need to take the transpose b/c matrix is symmetric.
+        }
     }
     //cout << "SUM IS " << sum << endl;
     sum *= volCell * box.lc_u_ordering * box.bulkDens / 3.0;
     //cout << "bulk " << box.bulkDens << endl;
-    cout << "SUM IS " << sum << endl;
     return -sum;
 
 }
@@ -1145,6 +1144,268 @@ void Sim::MC_contin_rotate_chain() { //Randomly rotate a disk about some axis wi
 }
 
 
+void Sim::MC_contin_bend() { //Beginning at some point along the backbone, bend the chain uniformly (keep orientations of bending section the same relative to one another)
+    int rand_chain,i,j,k,flag,dir,core,disk_length,ref,first,last;
+    double max_theta = PI/3; //Don't want more than a 60 degree rotation around any axis
+    double theta;
+    double pre_energy, post_energy, dE;
+    Vector3d axis; // Axis of rotation
+    Vector3d dist1; // Contains distance vector for each disk from center of mass for rotation
+    Vector3d dist2; // Contains new distance vector for each disk from center of mass for rotation
+    vector<Disk> chain(box.numDisks);
+
+    for (int move=0;move<box.numChains;move++) {
+        
+        do {
+            rand_chain = double(box.numChains)*RanGen->Random();
+        } while(rand_chain >= box.numChains);
+        
+        do {
+            core = double(box.numDisks)*RanGen->Random();
+        } while(core >= box.numDisks);
+        
+        ref = rand_chain*box.numDisks+core; 
+
+        if (2*RanGen->Random()-1 > 0) {
+            dir = 1; //
+            first = ref;
+            last = box.numDisks*rand_chain + box.numDisks-1; //last disk in current chain
+        } else {
+            first = box.numDisks*rand_chain; //first disk in current chain
+            last = ref;
+            dir = -1;
+        }
+        Polymer p(first, last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        sub_all_grids(p);
+        j = 0;
+        for (i=first;i<=last;i++) {
+            chain[j] = disk[i];
+            j++;
+        }
+        
+        theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
+        calc_random_vector(axis); //Random unit vector for rotation
+       
+        AngleAxisd aa(theta, axis);
+        Matrix3d rot;
+        rot = aa;
+        j = 0;
+        for (i=first;i<=last;i++) {
+            for (k=0;k<3;k++) {
+                dist1[k] = disk[i].rn[k] - disk[ref].rn[k];
+            }
+            dist2 = rot * dist1;
+            for (k=0;k<3;k++) {
+                disk[i].rn[k] = disk[ref].rn[k] + dist2[k];
+            }
+            PBC_shift(disk[i].r, disk[i].rn);
+            disk[i].u = rot * chain[j].u;
+            disk[i].f = rot * chain[j].f;
+            disk[i].v = rot * chain[j].v;
+            j++;
+
+        }
+
+        adjust_single_u_vector(ref);
+
+        add_all_grids(p);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first, p.last);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            j=0;
+            sub_all_grids(p);
+            for (i=p.first;i<=p.last;i++) {
+                disk[i] = chain[j];
+                j++;
+            }
+            add_all_grids(p);
+            box.numRejects++;
+        }
+    }
+    
+}
+
+void Sim::MC_contin_curl() { //Imparts curvature to the chain by "curling" it in a randomly chosen direction
+    int rand_chain,i,j,k,flag,dir,core,disk_length,ref,first,last,tot_move;
+    double max_theta = PI/50.0; //Low theta values because it can result in a lot of curvature  
+    double theta,tot_theta;
+    double pre_energy, post_energy, dE;
+    Vector3d axis; // Axis of rotation
+    Vector3d dist1; // Contains distance Vector3d for each disk from center of mass for rotation
+    Vector3d dist2; // Contains new distance vector for each disk from center of mass for rotation
+    Quaterniond quat;
+    vector<Disk> chain(box.numDisks);
+
+    for (int move=0;move<box.numChains;move++) {
+        
+        do {
+            rand_chain = double(box.numChains)*RanGen->Random();
+        } while(rand_chain >= box.numChains);
+        
+        do {
+            core = double(box.numDisks)*RanGen->Random();
+        } while(core >= box.numDisks);
+        
+        ref = rand_chain*box.numDisks+core; 
+
+        if (2*RanGen->Random()-1 > 0) {
+            dir = 1; //
+            first = ref;
+            last = box.numDisks*rand_chain + box.numDisks-1; //last disk in current chain
+            core = 0;
+        } else {
+            first = box.numDisks*rand_chain; //first disk in current chain
+            last = ref;
+            dir = -1;
+            core = last-first;
+        }
+        tot_move = last-first+1;
+        Polymer p(first, last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        sub_all_grids(p);
+        j = 0;
+        for (i=first;i<=last;i++) {
+            chain[j] = disk[i];
+            j++;
+        }
+        
+        theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
+        calc_random_normal_vector(axis,disk[ref].u); //Random unit vector for rotation
+       
+        for (i=1;i<tot_move;i++) {
+            j=i*dir;
+            tot_theta = double(i)*theta;
+
+            AngleAxisd aa(tot_theta, axis);
+            Matrix3d rot;
+            rot = aa;
+            //quat[0] = cos(tot_theta/2);
+            for (k=0;k<3;k++) {
+                //quat[k+1] = axis[k]*sin(tot_theta/2);
+                dist1[k] = chain[core+j].rn[k] - chain[core+j-dir].rn[k];
+            }
+            //quat_vec_rot(dist2,dist1,quat);
+            dist2 = rot * dist1;
+            for (k=0;k<3;k++) {
+                disk[ref+j].rn[k] = disk[ref+j-dir].rn[k] + dist2[k];
+            }
+            PBC_shift(disk[ref+j].r, disk[ref+j].rn);
+            //quat_vec_rot(disk[ref+j].u,chain[core+j].u,quat);
+            //quat_vec_rot(disk[ref+j].f,chain[core+j].f,quat);
+            //quat_vec_rot(disk[ref+j].v,chain[core+j].v,quat);
+
+        }
+        
+        for (i=first;i<=last;i++) {
+            adjust_single_u_vector(i);
+        }
+
+      
+        add_all_grids(p);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first, p.last);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            j=0;
+            sub_all_grids(p);
+            for (i=first;i<=last;i++) {
+                disk[i] = chain[j];
+                j++;
+            }
+            add_all_grids(p);
+            box.numRejects++;
+        }
+    }
+    
+  
+}
+
+
+void Sim::MC_contin_twist() { //Beginning at some point along the backbone, uniformly twist the chain
+    //WHEN YOU ADD PI STACKING THIS WILL NEED TO TO BE CHANGED
+    int rand_chain,i,j,k,flag,dir,core,disk_length,ref,first,last,increment;
+    double max_dtheta = PI/12; //Keeps incremental twists below 15 degrees
+    double theta, dtheta;
+    double pre_energy, post_energy, dE;
+    Disk *chain = new Disk[box.numDisks];
+
+    for (int move=0;move<box.numChains;move++) {
+        
+        do {
+            rand_chain = double(box.numChains)*RanGen->Random();
+        } while(rand_chain >= box.numChains);
+        
+        do {
+            core = double(box.numDisks)*RanGen->Random();
+        } while(core >= box.numDisks);
+        
+        ref = rand_chain*box.numDisks+core; 
+
+        if (2*RanGen->Random()-1 > 0) {
+            dir = 1; //
+            first = ref;
+            last = box.numDisks*rand_chain + box.numDisks-1; //last disk in current chain
+        } else {
+            first = box.numDisks*rand_chain;
+            last = ref;
+            dir = -1;
+        }
+
+        pre_energy = calc_disk_interval_energy(first,last);
+        j = 0;
+        for (i=first;i<=last;i++) {
+            chain[j] = disk[i];
+            j++;
+        }
+        
+        dtheta = max_dtheta*RanGen->Random(); //Random amount to rotate by
+       
+        j = 0;
+        if (dir == 1) increment = 1;
+        if (dir == -1) increment = last-first+1;
+        for (i=first;i<=last;i++) {
+            
+            theta = (increment)*dtheta;
+            AngleAxisd aa(theta, disk[i].u);
+            Matrix3d rot;
+            rot = aa;
+            disk[i].f = rot * chain[j].f;
+            disk[i].v = rot * chain[j].v;
+            j++;
+            increment += dir;
+
+        }
+
+        post_energy = calc_disk_interval_energy(first,last);
+
+        dE = post_energy - pre_energy;
+
+        if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
+            box.E_tot += dE; 
+            box.numAccepts++;
+        } else { //Reverse changes
+            j=0;
+            for (i=first;i<=last;i++) {
+                disk[i] = chain[j];
+                j++;
+            }
+            box.numRejects++;
+        }
+    }
+
+    delete [] chain;
+
+}
 
 
 void Sim::MCMoveContin() {
@@ -1152,6 +1413,10 @@ void Sim::MCMoveContin() {
     MC_contin_rotate();
     MC_contin_translate();
     MC_contin_rotate_chain();
+    
+    MC_contin_bend();
+    MC_contin_curl();
+    MC_contin_twist();
 }
 
 /***************************************************MONTE CARLO MOVES******************************************/

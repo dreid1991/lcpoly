@@ -79,6 +79,9 @@ class Sim {
         void MC_contin_rotate(); 
         void MC_contin_translate();
         void MC_contin_rotate_chain();
+        void MC_contin_bend();
+        void MC_contin_curl();
+        void MC_contin_twist();
 
         void MCMove();
         void MC_displace();
