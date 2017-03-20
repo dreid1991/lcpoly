@@ -62,6 +62,11 @@ class Sim {
         void sub_align_tensor_u(Polymer &);
         void modify_align_tensor_u(Polymer &, int);
 
+        void set_align_tensor_f();
+        void add_align_tensor_f(Polymer &);
+        void sub_align_tensor_f(Polymer &);
+        void modify_align_tensor_f(Polymer &, int);
+
         void set_count();
         void add_count(Polymer &);
         void sub_count(Polymer &);
@@ -73,6 +78,7 @@ class Sim {
         double calc_comp_total();
         double calc_chi_total();
         double calc_align_u_total();
+        double calc_align_f_total();
 
         void MCMoveContin();
         void MC_contin_displace(); 

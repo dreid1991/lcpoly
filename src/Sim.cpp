@@ -51,6 +51,8 @@ void Sim::openFiles() {
     FILE *dump;
     dump = fopen("config.xyz","w");
     fclose(dump);
+    //dump = fopen("wrap_config.xyz","w");
+    //fclose(dump);
     dump=fopen("Energy.txt","w");
     fclose(dump);
     dump = fopen("data.txt","w");
@@ -76,6 +78,7 @@ void Sim::read_input() {
       ret=fscanf(input,"%d", &box.checkInterval);    fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracDisplace);    fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracRotate);		 fgets(tt,2000,input);
+      ret=fscanf(input,"%lf", &box.fracRotateChain); fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracBend);		 fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracTwist);		 fgets(tt,2000,input);
       ret=fscanf(input,"%lf", &box.fracCurl);		 fgets(tt,2000,input);
@@ -100,6 +103,7 @@ void Sim::read_input() {
       ret=fscanf(input,"%lf",  &box.compressibility);           fgets(tt,2000,input);
       ret=fscanf(input,"%lf",  &box.con_chi);           fgets(tt,2000,input);
       ret=fscanf(input,"%lf",  &box.lc_u_ordering);           fgets(tt,2000,input);
+      ret=fscanf(input,"%lf",  &box.pi_pi_ordering);           fgets(tt,2000,input);
       fgets(tt,2000,input);fgets(tt,2000,input);
 
       fclose(input);
@@ -169,6 +173,7 @@ void Sim::allocate_memory() {
         box.densities[0] = Grid<double>(box.size, box.gridSize);
         box.densities[1] = Grid<double>(box.size, box.gridSize);
         box.alignTensorsU = Grid<Matrix3d>(box.size, box.gridSize);
+        box.alignTensorsF = Grid<Matrix3d>(box.size, box.gridSize);
         box.beadCounts = Grid<int>(box.size, box.gridSize);
 
     }
@@ -306,11 +311,13 @@ double Sim::calc_GB_total() { // Does not double count the energy
 void Sim::add_all_grids(Polymer &p) {
     add_density(p);
     add_align_tensor_u(p);
+    add_align_tensor_f(p);
     add_count(p);
 }
 void Sim::sub_all_grids(Polymer &p) {
     sub_density(p);
     sub_align_tensor_u(p);
+    sub_align_tensor_f(p);
     sub_count(p);
 }
 
@@ -369,24 +376,43 @@ void Sim::modify_align_tensor_u(Polymer &p, int sign) {
     for (int i=p.first; i<=p.last; i++) {
         Disk &d = disk[i];
         Matrix3d outerProd = d.u * (d.u.transpose() * 1.5);
-        //cout << "PARTICLE" << endl;
-        //cout << d.u << endl << endl << endl;;
         outerProd -= diag;
-        //cout << outerProd << endl << endl;
         PBC_shift(d.r, d.rn);
-       // Vector3d pos = {1, 1, 1};
-       // cout << "WHAT IS THIS???" << endl;
         box.alignTensorsU(d.r) += outerProd * sign;
-        //cout << "running total" << endl;
-        //cout << box.alignTensorsU(d.r) << endl << endl;;
-        //cout << "sign " << sign << " dens " << box.bulkDens << endl;
-     //   cout << "TOTAL" << endl;
-     //   cout << outerProd << endl << endl;
     }
-
-
 }
 
+void Sim::set_align_tensor_f() {
+    Matrix3d zero = Matrix3d::Zero();
+    box.alignTensorsF.reset_grid(zero);
+
+    Polymer p(0, disk.size()-1);
+    add_align_tensor_f(p);
+}
+
+void Sim::add_align_tensor_f(Polymer &p) {
+    modify_align_tensor_f(p, 1);
+}
+
+void Sim::sub_align_tensor_f(Polymer &p) {
+    modify_align_tensor_f(p, -1);
+}
+
+
+void Sim::modify_align_tensor_f(Polymer &p, int sign) {
+    double invDens = 1 / box.bulkDens;
+    Matrix3d diag;
+    diag << 0.5, 0  , 0  ,
+            0  , 0.5, 0  ,
+            0  , 0  , 0.5;
+    for (int i=p.first; i<=p.last; i++) {
+        Disk &d = disk[i];
+        Matrix3d outerProd = d.f * (d.f.transpose() * 1.5);
+        outerProd -= diag;
+        PBC_shift(d.r, d.rn);
+        box.alignTensorsF(d.r) += outerProd * sign;
+    }
+}
 void Sim::set_count() {
     box.beadCounts.reset_grid(0);
     Polymer p(0, disk.size()-1);
@@ -435,6 +461,23 @@ double Sim::calc_align_u_total() {
     return -sum;
 
 }
+double Sim::calc_align_f_total() {
+    double volCell = box.densities[0].volCell();
+    double sum = 0;
+    for (int i=0; i<box.alignTensorsF.vals.size(); i++) {
+        if (box.beadCounts.vals[i]) {
+            Matrix3d avg = box.alignTensorsF.vals[i] / box.beadCounts.vals[i];
+            sum += avg.cwiseProduct(avg).sum(); //tensor contraction, but I don't need to take the transpose b/c matrix is symmetric.
+        }
+    }
+    //cout << "SUM IS " << sum << endl;
+    sum *= volCell * box.pi_pi_ordering * box.bulkDens / 3.0;
+    //cout << "bulk " << box.bulkDens << endl;
+    //return 0;
+    return -sum;
+
+}
+
 
 double Sim::calc_chi_total() {
     double volCell = box.densities[0].volCell();
@@ -549,7 +592,7 @@ double Sim::calc_disk_GB_energy_without(int i, int start_exclude) { //Calculates
 }
 
 double Sim::calc_eng_contin_total() {
-    double E_bond,E_wlc,E_comp,E_chi,E_align;
+    double E_bond,E_wlc,E_comp,E_chi,E_align,E_align_f;
     E_comp = 0;
     E_chi = 0;
     E_align = 0;
@@ -559,9 +602,10 @@ double Sim::calc_eng_contin_total() {
     E_comp = calc_comp_total();
     //   E_chi = calc_chi_total();
     E_align = calc_align_u_total();
+    E_align_f = calc_align_f_total();
     E_bond = calc_bond_total();
     E_wlc = calc_wlc_total();
-    return E_bond + E_wlc + E_comp + E_chi + E_align;
+    return E_bond + E_wlc + E_comp + E_chi + E_align + E_align_f;
 }
 
 
@@ -932,7 +976,7 @@ void Sim::MC_contin_displace() { //Displace a disk slightly without changing its
         }
         //printf("%d %d %d\n", i, first, last);
         
-        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() + calc_disk_interval_energy(p.first,p.last);
         sub_all_grids(p);
         
         disk[i].rn[0] += rx;
@@ -944,7 +988,7 @@ void Sim::MC_contin_displace() { //Displace a disk slightly without changing its
         adjust_u_vectors(i);
 
         add_all_grids(p);
-        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
         dE = post_energy - pre_energy;
         if (RanGen->Random() < exp(-dE/box.T)) { //Accept changes
             box.E_tot += dE;
@@ -979,18 +1023,20 @@ void Sim::MC_contin_rotate() { //Randomly rotate a disk about some axis without 
         } while(i >= box.numTotal);
         
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
-       
+        Polymer p(i, i); 
         //WHEN I ADD IN PI-PI STACKING I WILL NEED TO PUT GRID ENERGIES HERE
-        pre_energy = calc_disk_energy(i);
+        pre_energy = calc_align_f_total() + calc_disk_energy(i);
+        sub_all_grids(p);
         save = disk[i];
         AngleAxisd aaU(theta, save.u);
         Matrix3d rot; 
         rot = aaU;
         disk[i].f = rot * save.f;
         disk[i].v = rot * save.v;
+        add_all_grids(p);
 
 
-        post_energy = calc_disk_energy(i);
+        post_energy = calc_align_f_total() +calc_disk_energy(i);
 
         dE = post_energy - pre_energy;
 
@@ -998,7 +1044,9 @@ void Sim::MC_contin_rotate() { //Randomly rotate a disk about some axis without 
             box.E_tot += dE; 
             box.numAccepts++;
         } else { //Reverse changes
+            sub_all_grids(p);
             disk[i] = save;
+            add_all_grids(p);
             box.numRejects++;
         }
            
@@ -1027,7 +1075,7 @@ void Sim::MC_contin_translate() {
             chain[i] = disk[p.first+i];
         }
 
-        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
         sub_all_grids(p);
         xCenter = 0.0;
         yCenter = 0.0;
@@ -1054,7 +1102,7 @@ void Sim::MC_contin_translate() {
         }
 
         add_all_grids(p);
-        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
 
         dE = post_energy - pre_energy;
 
@@ -1096,7 +1144,7 @@ void Sim::MC_contin_rotate_chain() { //Randomly rotate a disk about some axis wi
         theta = max_theta*(2*RanGen->Random()-1); //Random amount to rotate by
        
         //WHEN I ADD IN PI-PI STACKING I WILL NEED TO PUT GRID ENERGIES HERE
-        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
         sub_all_grids(p);
 
         calc_random_vector(axis); //Generate axis completely randomly
@@ -1123,7 +1171,7 @@ void Sim::MC_contin_rotate_chain() { //Randomly rotate a disk about some axis wi
         }
 
         add_all_grids(p);
-        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
 
         dE = post_energy - pre_energy;
 
@@ -1176,7 +1224,7 @@ void Sim::MC_contin_bend() { //Beginning at some point along the backbone, bend 
             dir = -1;
         }
         Polymer p(first, last);
-        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
         sub_all_grids(p);
         j = 0;
         for (i=first;i<=last;i++) {
@@ -1210,7 +1258,7 @@ void Sim::MC_contin_bend() { //Beginning at some point along the backbone, bend 
         adjust_single_u_vector(ref);
 
         add_all_grids(p);
-        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first, p.last);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first, p.last);
 
         dE = post_energy - pre_energy;
 
@@ -1267,7 +1315,7 @@ void Sim::MC_contin_curl() { //Imparts curvature to the chain by "curling" it in
         }
         tot_move = last-first+1;
         Polymer p(first, last);
-        pre_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first,p.last);
+        pre_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first,p.last);
         sub_all_grids(p);
         j = 0;
         for (i=first;i<=last;i++) {
@@ -1308,7 +1356,7 @@ void Sim::MC_contin_curl() { //Imparts curvature to the chain by "curling" it in
 
       
         add_all_grids(p);
-        post_energy = calc_comp_total() + calc_align_u_total() + calc_disk_interval_energy(p.first, p.last);
+        post_energy = calc_comp_total() + calc_align_u_total() + calc_align_f_total() +calc_disk_interval_energy(p.first, p.last);
 
         dE = post_energy - pre_energy;
 
@@ -1360,8 +1408,10 @@ void Sim::MC_contin_twist() { //Beginning at some point along the backbone, unif
             last = ref;
             dir = -1;
         }
+        Polymer p(first, last);
 
-        pre_energy = calc_disk_interval_energy(first,last);
+        pre_energy = calc_align_f_total() +calc_disk_interval_energy(first,last);
+        sub_all_grids(p);
         j = 0;
         for (i=first;i<=last;i++) {
             chain[j] = disk[i];
@@ -1386,7 +1436,8 @@ void Sim::MC_contin_twist() { //Beginning at some point along the backbone, unif
 
         }
 
-        post_energy = calc_disk_interval_energy(first,last);
+        add_all_grids(p);
+        post_energy = calc_align_f_total() + calc_disk_interval_energy(first,last);
 
         dE = post_energy - pre_energy;
 
@@ -1394,11 +1445,13 @@ void Sim::MC_contin_twist() { //Beginning at some point along the backbone, unif
             box.E_tot += dE; 
             box.numAccepts++;
         } else { //Reverse changes
+            sub_all_grids(p);
             j=0;
             for (i=first;i<=last;i++) {
                 disk[i] = chain[j];
                 j++;
             }
+            add_all_grids(p);
             box.numRejects++;
         }
     }
@@ -1409,14 +1462,30 @@ void Sim::MC_contin_twist() { //Beginning at some point along the backbone, unif
 
 
 void Sim::MCMoveContin() {
-    MC_contin_displace();
-    MC_contin_rotate();
-    MC_contin_translate();
-    MC_contin_rotate_chain();
-    
-    MC_contin_bend();
-    MC_contin_curl();
-    MC_contin_twist();
+    double rand = RanGen->Random();
+    double displace = box.fracDisplace;
+    double rotate = displace + box.fracRotate;
+    double rotateChain = rotate + box.fracRotateChain;
+    double bend = rotateChain + box.fracBend;
+    double twist = bend + box.fracTwist;
+    double curl = twist + box.fracCurl;
+    double translate = curl + box.fracTranslate;
+    assert(fabs(translate-1) < 0.0001);
+    if (rand < displace) {
+        MC_contin_displace();
+    } else if (rand < rotate) {
+        MC_contin_rotate();
+    } else if (rand < rotateChain) {
+        MC_contin_rotate_chain();
+    } else if (rand < bend) {
+        MC_contin_bend();
+    } else if (rand < twist) {
+        MC_contin_twist();
+    } else if (rand < curl) {
+        MC_contin_curl();
+    } else if (rand < translate) {
+        MC_contin_translate();
+    }
 }
 
 /***************************************************MONTE CARLO MOVES******************************************/
@@ -1930,10 +1999,19 @@ void Sim::printXYZ() {
     double dtheta = 2*PI/12;
     double theta;
     dump = fopen("config.xyz","a");
+    fprintf(dump,"%d\nHELLO\n",14*box.numTotal);
+    double SCALE = 5;
+    for (i=0;i<box.numTotal;i++) {
+        fprintf(dump,"0\t%f\t%f\t%f\n",SCALE*disk[i].rn[0],SCALE*disk[i].rn[1],SCALE*disk[i].rn[2]);
+    }
+    /*
+    dump = fopen("wrap_config.xyz","a");
     fprintf(dump,"%d\nHELLO\n",13*box.numTotal);
     for (i=0;i<box.numTotal;i++) {
-        fprintf(dump,"0\t%f\t%f\t%f\n",disk[i].rn[0],disk[i].rn[1],disk[i].rn[2]);
+        fprintf(dump,"0\t%f\t%f\t%f\n",disk[i].r[0],disk[i].r[1],disk[i].r[2]);
     }
+    */
+    double ring = 6;
     for (i=0;i<box.numTotal;i++) {
        for (j=0;j<12;j++) {
             theta = dtheta*j;
@@ -1942,83 +2020,89 @@ void Sim::printXYZ() {
             rot = aa;
             Vector3d v = rot * disk[i].u;
 
-            fprintf(dump,"0\t%f\t%f\t%f\n",disk[i].rn[0]+v[0]*box.r0/3,disk[i].rn[1]+v[1]*box.r0/3,disk[i].rn[2]+v[2]*box.r0/3);
+            fprintf(dump,"0\t%f\t%f\t%f\n",SCALE*(disk[i].rn[0]+v[0]*box.r0/ring),SCALE*(disk[i].rn[1]+v[1]*box.r0/ring),SCALE*(disk[i].rn[2]+v[2]*box.r0/ring));
        }
+       Vector3d fVec = disk[i].rn + disk[i].f / ring;
+       fprintf(dump,"0\t%f\t%f\t%f\n",SCALE*fVec[0],SCALE*fVec[1],SCALE*fVec[2]);
+
     }
 
     fclose(dump);
 }
 
 void Sim::printPSF() {
-      FILE *sout;
-      int counter,type,pair,chain_switch,bead_type;
-      char t[2]="O";
-      sout=fopen("polymer.psf","w");
-      fprintf(sout,"*\n*\n*\n*\n*\n\n");
-      fprintf(sout,"%7d !NATOMS\n",13*box.numTotal);
-      for(counter=1;counter<=13*box.numTotal;counter++){
-        if(counter<=box.numTotal){
+    FILE *sout;
+    int counter,type,pair,chain_switch,bead_type;
+    char t[2]="O";
+    sout=fopen("polymer.psf","w");
+    fprintf(sout,"*\n*\n*\n*\n*\n\n");
+    fprintf(sout,"%7d !NATOMS\n",14*box.numTotal);
+    counter = 1;
+    for (int i=0; i<box.numTotal; i++) {
 
-          {t[0]='O'; bead_type=1;}
+        int polyId = (counter - 1) / box.numDisks;
+        {t[0]='O'; bead_type=1;}
 
-          fprintf(sout, "%8d ", counter);
-          fprintf(sout, "POLY ");
-          fprintf(sout, "%-4d ",1);
-          fprintf(sout, "%s  ", "POL");
-          fprintf(sout, "%-5s ",t);
-          fprintf(sout, "%3d  ", bead_type);
-          fprintf(sout, "%13.6e   ",0.0);
-          fprintf(sout, "%7.3lf           0\n", 1.0);
-        }
+        fprintf(sout, "%8d ", counter);
+        fprintf(sout, "POLY ");
+        fprintf(sout, "%-4d ",polyId+1);
+        fprintf(sout, "%s  ", "POL");
+        fprintf(sout, "%-5s ",t);
+        fprintf(sout, "%3d  ", bead_type);
+        fprintf(sout, "%13.6e   ",0.0);
+        fprintf(sout, "%7.3lf           0\n", 1.0);
+        counter++;
+    }
+    for (int i=0; i<box.numTotal*13; i++) {
 
-        else{
-          t[0]='S'; bead_type=2;
-          fprintf(sout, "%8d ", counter);
-          fprintf(sout, "SOLV ");
-          fprintf(sout, "%-4d ",1);
-          fprintf(sout, "%s  ", "SOL");
-          fprintf(sout, "%-5s ",t);
-          fprintf(sout, "%3d  ", bead_type);
-          fprintf(sout, "%13.6e   ",0.0);
-          fprintf(sout, "%7.3lf           0\n", 1.0);
+        int polyId = (counter - box.numTotal - 1) / (box.numDisks*13);
+        t[0]='S'; bead_type=2;
+        fprintf(sout, "%8d ", counter+1);
+        fprintf(sout, "SOLV ");
+        fprintf(sout, "%-4d ",polyId+1);
+        fprintf(sout, "%s  ", "SOL");
+        fprintf(sout, "%-5s ",t);
+        fprintf(sout, "%3d  ", bead_type);
+        fprintf(sout, "%13.6e   ",0.0);
+        fprintf(sout, "%7.3lf           0\n", 1.0);
+        counter++;
 
-        }        
         //fprintf(sout,"%8d\tU\t%4d\tPOL\t%1s\t%1s\t0.0000000\t1.0000\t0\n  ",counter,counter-1,t,t);
-      }
+    }
 
 
-      fprintf(sout,"\n%8d !NBOND: bond\n",(box.numDisks-1)*box.numChains);
+    fprintf(sout,"\n%8d !NBOND: bond\n",(box.numDisks-1)*box.numChains);
 
 
 
 
-      pair=1;
-      counter=1;
-      for(counter=1;counter<=box.numTotal;counter++){
+    pair=1;
+    counter=1;
+    for(counter=1;counter<=box.numTotal;counter++){
         chain_switch=counter%box.numDisks;
         //printf("**chain_switch:\t%d\n",chain_switch);
         if(chain_switch==0)
-          {counter++;
-        if(counter>box.numTotal)
-          break;
-          }
+        {counter++;
+            if(counter>box.numTotal)
+                break;
+        }
 
         if(pair==5)
-          {pair=1;fprintf(sout,"\n");}
+        {pair=1;fprintf(sout,"\n");}
         //printf("**counter:\t%d\n",counter);
         fprintf(sout,"%8d%8d",counter,counter+1);
         pair++;
-      }
+    }
 
-        fprintf(sout,"\n%8d !NTHETA: angles\n",0);
-      fprintf(sout,"\n%8d !NPHI: dihedrals\n",0);
-      fprintf(sout,"\n%8d !NIMPR\n",0);
-      fprintf(sout,"\n%8d !HDON\n",0);
-      fprintf(sout,"\n%8d !HACC\n",0);
-      fprintf(sout,"\n%8d !NNB\n",0);
+    fprintf(sout,"\n%8d !NTHETA: angles\n",0);
+    fprintf(sout,"\n%8d !NPHI: dihedrals\n",0);
+    fprintf(sout,"\n%8d !NIMPR\n",0);
+    fprintf(sout,"\n%8d !HDON\n",0);
+    fprintf(sout,"\n%8d !HACC\n",0);
+    fprintf(sout,"\n%8d !NNB\n",0);
 
 
-      fclose(sout);
+    fclose(sout);
 
 }
 

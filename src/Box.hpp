@@ -31,7 +31,7 @@ public:
     int checkpoint; //0 if starting from scratch. 1 if loading a configuration
     int checkInterval; //MC cycle interval after which checkpoints are made
 
-    double fracDisplace, fracRotate, fracBend, fracTwist, fracReptate, fracCurl, fracTranslate; //Relative occurence of the different Monte Carlo moves
+    double fracDisplace, fracRotate, fracRotateChain, fracBend, fracTwist, fracReptate, fracCurl, fracTranslate; //Relative occurence of the different Monte Carlo moves
     int maxReptate;
     int mode; // 0->particle, 1->contin
 
@@ -39,10 +39,12 @@ public:
     double bulkDens;
     double con_chi; //continuum chi
     double lc_u_ordering; // mu parameter for preference to align along U director
+    double pi_pi_ordering; // strength for pi-pi stacking
     double compressibility; //kappa parameter for compressibility
     double gridSize; //attempted discretization of the grid.  MAY DIFFER FROM ACTUAL DISCRETIZATION IN ORDER TO MAKE INTEGER NUMBER OF GRID CELLS.  Actual # stored in grid classes
     Grid<double> densities[2];
     Grid<Matrix3d> alignTensorsU;
+    Grid<Matrix3d> alignTensorsF;
     Grid<int> beadCounts;
 
 
